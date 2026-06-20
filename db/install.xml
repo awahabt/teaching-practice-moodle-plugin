@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<XMLDB PATH="mod/teachingpractice/db" VERSION="20241201"
+       COMMENT="Tables for Teaching Practice activity module">
+  <TABLES>
+
+    <!--
+      TABLE 1: teachingpractice
+      One row per activity instance added to a course.
+      Stores the activity settings: linked course, roles, name.
+    -->
+    <TABLE NAME="teachingpractice" COMMENT="Each activity instance settings">
+      <FIELDS>
+        <FIELD NAME="id"               TYPE="int"  LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="course"           TYPE="int"  LENGTH="10" NOTNULL="true" COMMENT="Course B — where this activity lives"/>
+        <FIELD NAME="name"             TYPE="char" LENGTH="255" NOTNULL="true" COMMENT="Activity name shown in course"/>
+        <FIELD NAME="intro"            TYPE="text"              NOTNULL="false" COMMENT="Activity description"/>
+        <FIELD NAME="introformat"      TYPE="int"  LENGTH="4"   NOTNULL="true" DEFAULT="1"/>
+        <FIELD NAME="linked_course"    TYPE="int"  LENGTH="10"  NOTNULL="true"  COMMENT="Course A — where students submit their project"/>
+        <FIELD NAME="linked_assign"    TYPE="int"  LENGTH="10"  NOTNULL="true"  COMMENT="Assignment ID in Course A that counts as project submission"/>
+        <FIELD NAME="student_role"     TYPE="int"  LENGTH="10"  NOTNULL="true"  COMMENT="Moodle role ID for students"/>
+        <FIELD NAME="ct_role"          TYPE="int"  LENGTH="10"  NOTNULL="true"  COMMENT="Moodle role ID for Cooperating Teacher"/>
+        <FIELD NAME="ht_role"          TYPE="int"  LENGTH="10"  NOTNULL="true"  COMMENT="Moodle role ID for Head Teacher"/>
+        <FIELD NAME="timecreated"      TYPE="int"  LENGTH="10"  NOTNULL="true"/>
+        <FIELD NAME="timemodified"     TYPE="int"  LENGTH="10"  NOTNULL="true"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary" TYPE="primary" FIELDS="id"/>
+        <KEY NAME="course"  TYPE="foreign" FIELDS="course" REFTABLE="course" REFFIELDS="id"/>
+      </KEYS>
+    </TABLE>
+
+    <!--
+      TABLE 2: teachingpractice_performa
+      Stores CT and HT evaluation data per student per activity instance.
+    -->
+    <TABLE NAME="teachingpractice_performa" COMMENT="Evaluation performa per student per instance">
+      <FIELDS>
+        <FIELD NAME="id"                        TYPE="int"  LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="instanceid"                TYPE="int"  LENGTH="10" NOTNULL="true" COMMENT="FK to teachingpractice.id"/>
+        <FIELD NAME="studentid"                 TYPE="int"  LENGTH="10" NOTNULL="true"/>
+        <!-- Basic teaching practice info -->
+        <FIELD NAME="registration_no"           TYPE="char" LENGTH="50"  NOTNULL="true"/>
+        <FIELD NAME="school_name"               TYPE="char" LENGTH="255" NOTNULL="true"/>
+        <FIELD NAME="start_date"                TYPE="int"  LENGTH="10"  NOTNULL="true"/>
+        <FIELD NAME="end_date"                  TYPE="int"  LENGTH="10"  NOTNULL="true"/>
+        <FIELD NAME="morning_time"              TYPE="char" LENGTH="20"  NOTNULL="true"/>
+        <FIELD NAME="afternoon_time"            TYPE="char" LENGTH="20"  NOTNULL="true"/>
+        <FIELD NAME="days_count"                TYPE="int"  LENGTH="5"   NOTNULL="true"/>
+        <FIELD NAME="cooperating_teacher_name"  TYPE="char" LENGTH="255" NOTNULL="true"/>
+        <FIELD NAME="subject_1"                 TYPE="char" LENGTH="255" NOTNULL="false"/>
+        <FIELD NAME="subject_2"                 TYPE="char" LENGTH="255" NOTNULL="false"/>
+        <FIELD NAME="subject_3"                 TYPE="char" LENGTH="255" NOTNULL="false"/>
+        <!-- Cooperating Teacher ratings -->
+        <FIELD NAME="ct_subject_knowledge"       TYPE="char" LENGTH="30" NOTNULL="false"/>
+        <FIELD NAME="ct_lesson_planning"         TYPE="char" LENGTH="30" NOTNULL="false"/>
+        <FIELD NAME="ct_instructional_delivery"  TYPE="char" LENGTH="30" NOTNULL="false"/>
+        <FIELD NAME="ct_classroom_management"    TYPE="char" LENGTH="30" NOTNULL="false"/>
+        <FIELD NAME="ct_assessment_feedback"     TYPE="char" LENGTH="30" NOTNULL="false"/>
+        <FIELD NAME="ct_professionalism"         TYPE="char" LENGTH="30" NOTNULL="false"/>
+        <FIELD NAME="ct_remarks"                 TYPE="text"              NOTNULL="false"/>
+        <FIELD NAME="ct_teacher_name"            TYPE="char" LENGTH="255" NOTNULL="false"/>
+        <FIELD NAME="ct_submitted_date"          TYPE="int"  LENGTH="10"  NOTNULL="false"/>
+        <!-- Head Teacher ratings -->
+        <FIELD NAME="ht_attendance"              TYPE="char" LENGTH="30" NOTNULL="false"/>
+        <FIELD NAME="ht_punctuality"             TYPE="char" LENGTH="30" NOTNULL="false"/>
+        <FIELD NAME="ht_participation_teaching"  TYPE="char" LENGTH="30" NOTNULL="false"/>
+        <FIELD NAME="ht_participation_cocurr"    TYPE="char" LENGTH="30" NOTNULL="false"/>
+        <FIELD NAME="ht_professional_conduct"    TYPE="char" LENGTH="30" NOTNULL="false"/>
+        <FIELD NAME="ht_overall_recommendation"  TYPE="char" LENGTH="50" NOTNULL="false"/>
+        <FIELD NAME="ht_remarks"                 TYPE="text"              NOTNULL="false"/>
+        <FIELD NAME="ht_teacher_name"            TYPE="char" LENGTH="255" NOTNULL="false"/>
+        <FIELD NAME="ht_submitted_date"          TYPE="int"  LENGTH="10"  NOTNULL="false"/>
+        <!-- pending | ct_done | completed -->
+        <FIELD NAME="status"        TYPE="char" LENGTH="20" NOTNULL="true" DEFAULT="pending"/>
+        <FIELD NAME="timecreated"   TYPE="int"  LENGTH="10" NOTNULL="true"/>
+        <FIELD NAME="timemodified"  TYPE="int"  LENGTH="10" NOTNULL="true"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary"     TYPE="primary" FIELDS="id"/>
+        <KEY NAME="instanceid"  TYPE="foreign" FIELDS="instanceid" REFTABLE="teachingpractice" REFFIELDS="id"/>
+        <KEY NAME="studentid"   TYPE="foreign" FIELDS="studentid"  REFTABLE="user"             REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="instance_student" UNIQUE="true"  FIELDS="instanceid, studentid"/>
+        <INDEX NAME="status"           UNIQUE="false" FIELDS="status"/>
+      </INDEXES>
+    </TABLE>
+
+    <!--
+      TABLE 3: teachingpractice_certificate
+      One row per issued certificate.
+    -->
+    <TABLE NAME="teachingpractice_certificate" COMMENT="Issued certificates">
+      <FIELDS>
+        <FIELD NAME="id"             TYPE="int"  LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="performaid"     TYPE="int"  LENGTH="10" NOTNULL="true"/>
+        <FIELD NAME="instanceid"     TYPE="int"  LENGTH="10" NOTNULL="true"/>
+        <FIELD NAME="studentid"      TYPE="int"  LENGTH="10" NOTNULL="true"/>
+        <FIELD NAME="certificate_no" TYPE="char" LENGTH="50" NOTNULL="true"/>
+        <FIELD NAME="issued_date"    TYPE="int"  LENGTH="10" NOTNULL="true"/>
+        <FIELD NAME="timecreated"    TYPE="int"  LENGTH="10" NOTNULL="true"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary"    TYPE="primary" FIELDS="id"/>
+        <KEY NAME="performaid" TYPE="foreign" FIELDS="performaid" REFTABLE="teachingpractice_performa" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="certificate_no" UNIQUE="true"  FIELDS="certificate_no"/>
+        <INDEX NAME="studentid"      UNIQUE="false" FIELDS="studentid"/>
+      </INDEXES>
+    </TABLE>
+
+  </TABLES>
+</XMLDB>

@@ -1,0 +1,332 @@
+<?php
+/**
+ * certificate.php
+ *
+ * Displays the Teaching Practice Completion Certificate.
+ * All data is pulled dynamically from the database.
+ *
+ * URL parameters:
+ *   id        = course module ID
+ *   studentid = student whose certificate to show
+ */
+
+require_once('../../config.php');
+require_once($CFG->dirroot . '/mod/teachingpractice/lib.php');
+
+$cmid      = required_param('id',        PARAM_INT);
+$studentid = required_param('studentid', PARAM_INT);
+
+list($course, $cm) = get_course_and_cm_from_cmid($cmid, 'teachingpractice');
+$instance = $DB->get_record('teachingpractice', ['id' => $cm->instance], '*', MUST_EXIST);
+
+require_login($course, true, $cm);
+$context = context_module::instance($cm->id);
+require_capability('mod/teachingpractice:viewcertificate', $context);
+
+$student  = $DB->get_record('user', ['id' => $studentid], '*', MUST_EXIST);
+$performa = tp_get_performa($instance->id, $studentid);
+
+$PAGE->set_url(new moodle_url('/mod/teachingpractice/certificate.php', [
+    'id'        => $cmid,
+    'studentid' => $studentid,
+]));
+$PAGE->set_context($context);
+$PAGE->set_course($course);
+$PAGE->set_cm($cm);
+$PAGE->set_title('Teaching Practice Certificate — ' . fullname($student));
+$PAGE->set_heading($course->fullname);
+
+// Certificate not ready yet
+if (!$performa || $performa->status !== TP_STATUS_COMPLETED) {
+    echo $OUTPUT->header();
+    echo $OUTPUT->notification(
+        get_string('error_not_complete', 'mod_teachingpractice'), 'warning'
+    );
+    echo html_writer::link(
+        new moodle_url('/mod/teachingpractice/view.php', ['id' => $cmid]),
+        '← Back',
+        ['class' => 'btn btn-secondary mt-2']
+    );
+    echo $OUTPUT->footer();
+    exit;
+}
+
+$certificate = $DB->get_record('teachingpractice_certificate', ['performaid' => $performa->id]);
+
+if (!$certificate) {
+    echo $OUTPUT->header();
+    echo $OUTPUT->notification(
+        get_string('error_no_certificate', 'mod_teachingpractice'), 'error'
+    );
+    echo $OUTPUT->footer();
+    exit;
+}
+
+// Format dates
+$start_date  = date('d F Y', $performa->start_date);
+$end_date    = date('d F Y', $performa->end_date);
+$issued_date = date('d F Y', $certificate->issued_date);
+
+// Build subjects list (exclude empty values)
+$subjects = array_filter([
+    $performa->subject_1,
+    $performa->subject_2,
+    $performa->subject_3,
+]);
+
+echo $OUTPUT->header();
+?>
+
+<style>
+/* ── Certificate wrapper ─────────────────────────────────────── */
+.tp-certificate {
+    border: 6px double #1a3a6b;
+    padding: 44px 56px;
+    max-width: 870px;
+    margin: 0 auto 30px;
+    font-family: "Times New Roman", Times, serif;
+    background: #ffffff;
+    color: #1a1a1a;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.10);
+}
+
+/* ── Header ──────────────────────────────────────────────────── */
+.tp-certificate .cert-header {
+    text-align: center;
+    border-bottom: 2px solid #1a3a6b;
+    padding-bottom: 18px;
+    margin-bottom: 22px;
+}
+.tp-certificate .cert-header h2 {
+    color: #1a3a6b;
+    font-size: 1.85rem;
+    margin: 0 0 4px;
+    letter-spacing: 1px;
+}
+.tp-certificate .cert-header p {
+    margin: 2px 0;
+    font-size: 0.93rem;
+    color: #555;
+}
+
+/* ── Certificate title ───────────────────────────────────────── */
+.tp-certificate .cert-title {
+    text-align: center;
+    font-size: 1.45rem;
+    font-weight: bold;
+    color: #1a3a6b;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin: 18px 0 26px;
+    text-decoration: underline;
+}
+
+/* ── Body text ───────────────────────────────────────────────── */
+.tp-certificate .cert-body {
+    font-size: 1.04rem;
+    line-height: 1.95;
+    text-align: justify;
+}
+.tp-certificate .cert-body strong { color: #1a3a6b; }
+
+/* ── Subject list ────────────────────────────────────────────── */
+.tp-certificate .cert-subjects {
+    margin: 14px 0 14px 30px;
+}
+.tp-certificate .cert-subjects li { margin: 4px 0; }
+
+/* ── Evaluation tables ───────────────────────────────────────── */
+.tp-certificate .eval-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+    font-size: 0.94rem;
+}
+.tp-certificate .eval-table th {
+    background: #1a3a6b;
+    color: #fff;
+    padding: 8px 12px;
+    text-align: left;
+}
+.tp-certificate .eval-table td {
+    padding: 7px 12px;
+    border: 1px solid #ccc;
+}
+.tp-certificate .eval-table tr:nth-child(even) td {
+    background: #f5f8ff;
+}
+
+/* ── Recommendation box ──────────────────────────────────────── */
+.tp-certificate .cert-recommendation {
+    background: #eef3ff;
+    border-left: 4px solid #1a3a6b;
+    padding: 10px 16px;
+    margin: 18px 0;
+    font-size: 1rem;
+}
+
+/* ── Certificate number ──────────────────────────────────────── */
+.tp-certificate .cert-no {
+    text-align: right;
+    font-size: 0.88rem;
+    color: #666;
+    margin-bottom: 8px;
+}
+
+/* ── Footer ──────────────────────────────────────────────────── */
+.tp-certificate .cert-footer {
+    margin-top: 34px;
+    text-align: center;
+    font-size: 0.87rem;
+    color: #777;
+    border-top: 1px solid #ccc;
+    padding-top: 14px;
+}
+
+/* ── Print styles ────────────────────────────────────────────── */
+@media print {
+    .no-print { display: none !important; }
+    .tp-certificate {
+        border: 4px double #1a3a6b;
+        box-shadow: none;
+        padding: 30px 40px;
+    }
+}
+</style>
+
+<!-- Action buttons (hidden on print) -->
+<div class="no-print mb-3">
+    <button onclick="window.print()" class="btn btn-primary mr-2">
+        🖨️ Print Certificate
+    </button>
+    <a href="<?php echo (new moodle_url('/mod/teachingpractice/view.php', ['id' => $cmid]))->out(); ?>"
+       class="btn btn-secondary">
+        ← Back
+    </a>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     CERTIFICATE
+══════════════════════════════════════════════════════════════ -->
+<div class="tp-certificate">
+
+    <!-- Certificate number top-right -->
+    <div class="cert-no">
+        Certificate No:&nbsp;<strong><?php echo s($certificate->certificate_no); ?></strong>
+        &nbsp;|&nbsp; Date Issued: <?php echo $issued_date; ?>
+    </div>
+
+    <!-- University header -->
+    <div class="cert-header">
+        <h2>Allama Iqbal Open University</h2>
+        <p>Islamabad, Pakistan</p>
+        <p>Department of Education</p>
+    </div>
+
+    <!-- Title -->
+    <div class="cert-title">Teaching Practice Completion Certificate</div>
+
+    <!-- Main body -->
+    <div class="cert-body">
+        <p>
+            This is to certify that
+            <strong><?php echo fullname($student); ?></strong>,
+            Registration No.&nbsp;<strong><?php echo s($performa->registration_no); ?></strong>,
+            has successfully completed the Teaching Practice (Course Code:&nbsp;6997) at
+            <strong><?php echo s($performa->school_name); ?></strong>
+            from <strong><?php echo $start_date; ?></strong>
+            to&nbsp;<strong><?php echo $end_date; ?></strong>,
+            with timings
+            <strong><?php echo s($performa->morning_time); ?>&nbsp;–&nbsp;<?php echo s($performa->afternoon_time); ?></strong>,
+            completing a total of
+            <strong><?php echo (int)$performa->days_count; ?>&nbsp;days</strong>
+            of teaching practice under the supervision of
+            <strong><?php echo s($performa->cooperating_teacher_name); ?></strong>.
+        </p>
+
+        <?php if (!empty($subjects)): ?>
+        <p>During the teaching practice, the trainee teacher taught the following subject(s):</p>
+        <ul class="cert-subjects">
+            <?php foreach ($subjects as $subj): ?>
+                <li><?php echo s($subj); ?></li>
+            <?php endforeach; ?>
+        </ul>
+        <?php endif; ?>
+    </div>
+
+    <!-- Cooperating Teacher Evaluation table -->
+    <p>
+        <strong>Cooperating Teacher Evaluation</strong>
+        <span class="text-muted" style="font-size:0.9rem;">
+            (Evaluated by: <?php echo s($performa->ct_teacher_name); ?>
+            on <?php echo date('d F Y', $performa->ct_submitted_date); ?>)
+        </span>
+    </p>
+    <table class="eval-table">
+        <thead>
+            <tr><th>Criterion</th><th>Rating</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>Subject Knowledge</td>
+                <td><?php echo tp_rating_label($performa->ct_subject_knowledge); ?></td></tr>
+            <tr><td>Lesson Planning &amp; Preparation</td>
+                <td><?php echo tp_rating_label($performa->ct_lesson_planning); ?></td></tr>
+            <tr><td>Instructional Delivery</td>
+                <td><?php echo tp_rating_label($performa->ct_instructional_delivery); ?></td></tr>
+            <tr><td>Classroom Management</td>
+                <td><?php echo tp_rating_label($performa->ct_classroom_management); ?></td></tr>
+            <tr><td>Assessment &amp; Feedback</td>
+                <td><?php echo tp_rating_label($performa->ct_assessment_feedback); ?></td></tr>
+            <tr><td>Professionalism &amp; Communication</td>
+                <td><?php echo tp_rating_label($performa->ct_professionalism); ?></td></tr>
+        </tbody>
+    </table>
+    <?php if (!empty($performa->ct_remarks)): ?>
+        <p><em>CT Remarks: <?php echo s($performa->ct_remarks); ?></em></p>
+    <?php endif; ?>
+
+    <!-- Head Teacher Evaluation table -->
+    <p>
+        <strong>Head Teacher Evaluation</strong>
+        <span class="text-muted" style="font-size:0.9rem;">
+            (Evaluated by: <?php echo s($performa->ht_teacher_name); ?>
+            on <?php echo date('d F Y', $performa->ht_submitted_date); ?>)
+        </span>
+    </p>
+    <table class="eval-table">
+        <thead>
+            <tr><th>Criterion</th><th>Rating</th></tr>
+        </thead>
+        <tbody>
+            <tr><td>Attendance and Regularity</td>
+                <td><?php echo tp_rating_label($performa->ht_attendance); ?></td></tr>
+            <tr><td>Punctuality</td>
+                <td><?php echo tp_rating_label($performa->ht_punctuality); ?></td></tr>
+            <tr><td>Participation in Teaching–Learning Activities</td>
+                <td><?php echo tp_rating_label($performa->ht_participation_teaching); ?></td></tr>
+            <tr><td>Participation in Co-curricular Activities</td>
+                <td><?php echo tp_rating_label($performa->ht_participation_cocurr); ?></td></tr>
+            <tr><td>Professional Conduct and Collaboration</td>
+                <td><?php echo tp_rating_label($performa->ht_professional_conduct); ?></td></tr>
+        </tbody>
+    </table>
+    <?php if (!empty($performa->ht_remarks)): ?>
+        <p><em>HT Remarks: <?php echo s($performa->ht_remarks); ?></em></p>
+    <?php endif; ?>
+
+    <!-- Overall Recommendation -->
+    <div class="cert-recommendation">
+        <strong>Overall Recommendation:</strong>
+        <?php echo tp_recommendation_label($performa->ht_overall_recommendation); ?>
+    </div>
+
+    <!-- Footer -->
+    <div class="cert-footer">
+        This is a system-generated certificate and does not require a physical signature.<br>
+        Issued by <strong>Allama Iqbal Open University</strong> — Teaching Practice Management System
+    </div>
+
+</div>
+
+<?php
+echo $OUTPUT->footer();
