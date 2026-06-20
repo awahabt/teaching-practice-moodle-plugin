@@ -22,7 +22,7 @@ class mod_teachingpractice_mod_form extends moodleform_mod {
         $mform = $this->_form;
 
         // ── Activity name ─────────────────────────────────────────────────────
-        $mform->addElement('text', 'name', get_string('activityname', 'moodle'), ['size' => 64]);
+        $mform->addElement('text', 'name', get_string('modulename', 'mod_teachingpractice'), ['size' => 64]);
         $mform->setType('name', PARAM_TEXT);
         $mform->addRule('name', null, 'required', null, 'client');
         $mform->setDefault('name', 'Teaching Practice');
@@ -101,6 +101,7 @@ class mod_teachingpractice_mod_form extends moodleform_mod {
         $mform->addElement('select', 'linked_assign',
             get_string('linked_assign', 'mod_teachingpractice'),
             $assignment_options);
+        $mform->setType('linked_assign', PARAM_INT);
         $mform->addRule('linked_assign',
             'Please select the project submission assignment.', 'required', null, 'client');
         $mform->addHelpButton('linked_assign', 'linked_assign', 'mod_teachingpractice');
@@ -147,6 +148,45 @@ class mod_teachingpractice_mod_form extends moodleform_mod {
 
         // ── JS: reload assignments when linked_course selection changes ───────
         $PAGE->requires->js_call_amd('mod_teachingpractice/mod_form', 'init');
+    }
+
+    /**
+     * Repopulate the assignment dropdown after form data is loaded.
+     *
+     * Assignments are loaded via JavaScript on the client, but on submit Moodle
+     * rebuilds the form server-side. Select elements only accept values that exist
+     * in their options list — so we must reload assignments here or the saved
+     * linked_assign value is discarded and validation fails.
+     */
+    public function definition_after_data() {
+        parent::definition_after_data();
+
+        global $DB;
+        $mform = $this->_form;
+
+        $linkedcourse = $mform->getElementValue('linked_course');
+        if (is_array($linkedcourse)) {
+            $linkedcourse = reset($linkedcourse);
+        }
+        $linkedcourse = (int) $linkedcourse;
+
+        if ($linkedcourse <= 0) {
+            return;
+        }
+
+        $assignments = $DB->get_records(
+            'assign',
+            ['course' => $linkedcourse],
+            'name ASC',
+            'id, name'
+        );
+
+        $options = ['' => '--- Select assignment ---'];
+        foreach ($assignments as $a) {
+            $options[$a->id] = $a->name;
+        }
+
+        $mform->getElement('linked_assign')->load($options);
     }
 
     /**

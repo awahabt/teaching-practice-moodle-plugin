@@ -23,86 +23,42 @@ class performa_form extends moodleform {
         global $DB, $USER;
 
         $mform    = $this->_form;
-        $role     = $this->_customdata['role'];
-        $performa = $this->_customdata['performa'];
-        $student  = $this->_customdata['student'];
-        $cmid     = $this->_customdata['cmid'];
+        $role        = $this->_customdata['role'];
+        $performa    = $this->_customdata['performa'];
+        $student     = $this->_customdata['student'];
+        $cmid        = $this->_customdata['cmid'];
+        $sectiondata = $this->_customdata['sectiondata'];
+        $certno      = $this->_customdata['certno'] ?? null;
 
         $rating_opts = tp_get_rating_options();
         $rec_opts    = tp_get_recommendation_options();
 
-        // Hidden fields
-        $mform->addElement('hidden', 'id',        $cmid);
+        // Hidden fields — use cmid, not id (performa record also has an id field).
+        $mform->addElement('hidden', 'cmid', $cmid);
         $mform->addElement('hidden', 'studentid', $student->id);
-        $mform->addElement('hidden', 'role',      $role);
-        $mform->setType('id',        PARAM_INT);
+        $mform->addElement('hidden', 'role', $role);
+        $mform->setType('cmid', PARAM_INT);
         $mform->setType('studentid', PARAM_INT);
-        $mform->setType('role',      PARAM_ALPHA);
+        $mform->setType('role', PARAM_ALPHA);
 
         // =====================================================================
-        // SECTION A: Basic Teaching Practice Information
-        // Filled by CT first. Shown as read-only to HT.
+        // SECTION A: Teaching Practice Information (certificate preview)
+        // Filled by the student. Shown read-only to CT and HT.
         // =====================================================================
-        $mform->addElement('header', 'section_a', 'Section A: Teaching Practice Information');
+        $mform->addElement('header', 'section_a',
+            get_string('section_a_heading', 'mod_teachingpractice'));
         $mform->setExpanded('section_a', true);
 
-        // Student name — display only
-        $mform->addElement('static', 'student_name_display', 'Trainee Teacher Name',
-            html_writer::tag('strong', fullname($student)));
+        $mform->addElement('html', tp_render_section_a_certificate($student, $sectiondata, [
+            'certno' => $certno,
+        ]));
 
-        $mform->addElement('text', 'registration_no', 'Registration No.',
-            ['size' => 20, 'maxlength' => 50]);
-        $mform->setType('registration_no', PARAM_TEXT);
-        $mform->addRule('registration_no', 'Registration number is required.', 'required', null, 'client');
-
-        $mform->addElement('text', 'school_name', 'School Name',
-            ['size' => 60, 'maxlength' => 255]);
-        $mform->setType('school_name', PARAM_TEXT);
-        $mform->addRule('school_name', 'School name is required.', 'required', null, 'client');
-
-        $mform->addElement('date_selector', 'start_date', 'Teaching Practice Start Date');
-        $mform->addElement('date_selector', 'end_date',   'Teaching Practice End Date');
-
-        $mform->addElement('text', 'morning_time', 'Morning Time (Arrival)',
-            ['size' => 15, 'maxlength' => 20, 'placeholder' => 'e.g. 08:00 AM']);
-        $mform->setType('morning_time', PARAM_TEXT);
-        $mform->addRule('morning_time', 'Morning time is required.', 'required', null, 'client');
-
-        $mform->addElement('text', 'afternoon_time', 'Afternoon Time (Departure)',
-            ['size' => 15, 'maxlength' => 20, 'placeholder' => 'e.g. 01:30 PM']);
-        $mform->setType('afternoon_time', PARAM_TEXT);
-        $mform->addRule('afternoon_time', 'Afternoon time is required.', 'required', null, 'client');
-
-        $mform->addElement('text', 'days_count', 'Total Days of Teaching Practice',
-            ['size' => 5, 'maxlength' => 5]);
-        $mform->setType('days_count', PARAM_INT);
-        $mform->addRule('days_count', 'Total days is required.', 'required', null, 'client');
-        $mform->addRule('days_count', 'Must be a number.',        'numeric',  null, 'client');
-
-        $mform->addElement('text', 'cooperating_teacher_name', 'Name of Cooperating Teacher',
-            ['size' => 50, 'maxlength' => 255]);
-        $mform->setType('cooperating_teacher_name', PARAM_TEXT);
-        $mform->addRule('cooperating_teacher_name', 'Cooperating teacher name is required.', 'required', null, 'client');
-
-        $mform->addElement('text', 'subject_1', 'Subject 1',
-            ['size' => 40, 'maxlength' => 255]);
-        $mform->setType('subject_1', PARAM_TEXT);
-        $mform->addRule('subject_1', 'At least one subject is required.', 'required', null, 'client');
-
-        $mform->addElement('text', 'subject_2', 'Subject 2 (optional)',
-            ['size' => 40, 'maxlength' => 255]);
-        $mform->setType('subject_2', PARAM_TEXT);
-
-        $mform->addElement('text', 'subject_3', 'Subject 3 (optional)',
-            ['size' => 40, 'maxlength' => 255]);
-        $mform->setType('subject_3', PARAM_TEXT);
-
-        // Freeze Section A for HT (CT already filled it)
-        if ($role === 'ht' && $performa) {
-            foreach (['registration_no','school_name','start_date','end_date',
-                      'morning_time','afternoon_time','days_count',
-                      'cooperating_teacher_name','subject_1','subject_2','subject_3'] as $f) {
-                $mform->freeze($f);
+        foreach (tp_section_a_field_names() as $field) {
+            $mform->addElement('hidden', $field, $sectiondata->$field ?? '');
+            if ($field === 'days_count' || $field === 'start_date' || $field === 'end_date') {
+                $mform->setType($field, PARAM_INT);
+            } else {
+                $mform->setType($field, PARAM_TEXT);
             }
         }
 
@@ -201,25 +157,17 @@ class performa_form extends moodleform {
             $mform->setDefault('ht_teacher_name', fullname($USER));
         }
 
-        $this->add_action_buttons(true, 'Submit Evaluation');
-
-        // Pre-fill fields with existing data if record exists
         if ($performa) {
-            $this->set_data($performa);
+            $formdefaults = (array) $performa;
+            unset($formdefaults['id']);
+            $this->set_data($formdefaults);
         }
+
+        $this->add_action_buttons(true, get_string('submit_evaluation', 'mod_teachingpractice'));
     }
 
     public function validation($data, $files) {
         $errors = parent::validation($data, $files);
-
-        if (!empty($data['start_date']) && !empty($data['end_date'])) {
-            if ($data['end_date'] < $data['start_date']) {
-                $errors['end_date'] = 'End date cannot be earlier than start date.';
-            }
-        }
-        if (isset($data['days_count']) && (int)$data['days_count'] <= 0) {
-            $errors['days_count'] = 'Total days must be a positive number.';
-        }
         return $errors;
     }
 }

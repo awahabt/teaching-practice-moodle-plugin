@@ -42,6 +42,10 @@ class get_assignments extends external_api {
 
         require_login();
 
+        if (!$DB->record_exists('course', ['id' => $params['courseid']])) {
+            throw new \invalid_parameter_exception('Invalid course ID');
+        }
+
         $assigns = $DB->get_records(
             'assign',
             ['course' => $params['courseid']],

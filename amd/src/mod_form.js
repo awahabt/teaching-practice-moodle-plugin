@@ -4,85 +4,84 @@
 // When a course is selected, fetches that course's assignments via AJAX
 // and repopulates the linked_assign dropdown automatically.
 
-define(['core/ajax', 'core/notification'], function(Ajax, Notification) {
+define(['jquery', 'core/ajax', 'core/notification'], function($, Ajax, Notification) {
 
-    return {
-        init: function() {
+    /**
+     * Fetch assignments for a course and populate the select.
+     *
+     * @param {HTMLSelectElement} assignSelect
+     * @param {string|number} courseId
+     * @param {string|number} preselectId
+     */
+    function loadAssignments(assignSelect, courseId, preselectId) {
+        if (!courseId || courseId === '0') {
+            assignSelect.innerHTML =
+                '<option value="">--- Select linked course first ---</option>';
+            assignSelect.disabled = false;
+            return;
+        }
 
-            // Moodle autocomplete writes the selected value into a hidden
-            // input whose id = 'id_linked_course'
-            var courseInput  = document.getElementById('id_linked_course');
-            var assignSelect = document.getElementById('id_linked_assign');
+        assignSelect.innerHTML =
+            '<option value="">Loading assignments...</option>';
+        assignSelect.disabled = true;
 
-            if (!courseInput || !assignSelect) {
-                return;
-            }
+        Ajax.call([{
+            methodname: 'mod_teachingpractice_get_assignments',
+            args: {courseid: parseInt(courseId, 10)},
+            done: function(assignments) {
+                assignSelect.disabled = false;
+                assignSelect.innerHTML = '';
 
-            // Store the currently saved assignment ID so we can re-select
-            // it after the assignment list reloads (edit mode)
-            var savedAssignId = assignSelect.value || '';
-
-            // Helper: fetch assignments for a course and populate the select
-            function loadAssignments(courseId, preselectId) {
-                if (!courseId || courseId === '0') {
+                if (!assignments || assignments.length === 0) {
                     assignSelect.innerHTML =
-                        '<option value="">--- Select linked course first ---</option>';
+                        '<option value="">No assignments found in this course</option>';
                     return;
                 }
 
-                assignSelect.innerHTML =
-                    '<option value="">Loading assignments...</option>';
-                assignSelect.disabled = true;
+                var def = document.createElement('option');
+                def.value = '';
+                def.text = '--- Select assignment ---';
+                assignSelect.appendChild(def);
 
-                Ajax.call([{
-                    methodname: 'mod_teachingpractice_get_assignments',
-                    args: { courseid: parseInt(courseId, 10) },
-                    done: function(assignments) {
-                        assignSelect.disabled = false;
-                        assignSelect.innerHTML = '';
-
-                        if (!assignments || assignments.length === 0) {
-                            assignSelect.innerHTML =
-                                '<option value="">No assignments found in this course</option>';
-                            return;
-                        }
-
-                        // Default empty option
-                        var def    = document.createElement('option');
-                        def.value  = '';
-                        def.text   = '--- Select assignment ---';
-                        assignSelect.appendChild(def);
-
-                        assignments.forEach(function(a) {
-                            var opt   = document.createElement('option');
-                            opt.value = a.id;
-                            opt.text  = a.name;
-                            // Re-select previously saved assignment in edit mode
-                            if (String(a.id) === String(preselectId)) {
-                                opt.selected = true;
-                            }
-                            assignSelect.appendChild(opt);
-                        });
-                    },
-                    fail: function(err) {
-                        assignSelect.disabled = false;
-                        assignSelect.innerHTML =
-                            '<option value="">Error loading assignments</option>';
-                        Notification.exception(err);
+                assignments.forEach(function(a) {
+                    var opt = document.createElement('option');
+                    opt.value = a.id;
+                    opt.text = a.name;
+                    if (String(a.id) === String(preselectId)) {
+                        opt.selected = true;
                     }
-                }]);
+                    assignSelect.appendChild(opt);
+                });
+            },
+            fail: function(err) {
+                assignSelect.disabled = false;
+                assignSelect.innerHTML =
+                    '<option value="">Error loading assignments</option>';
+                Notification.exception(err);
+            }
+        }]);
+    }
+
+    return {
+        init: function() {
+            // Autocomplete renders as a hidden <select id="id_linked_course">.
+            var courseSelect = document.getElementById('id_linked_course');
+            var assignSelect = document.getElementById('id_linked_assign');
+
+            if (!courseSelect || !assignSelect) {
+                return;
             }
 
-            // Moodle's autocomplete element updates the hidden input value
-            // and fires a 'change' event when the user selects a course.
-            courseInput.addEventListener('change', function() {
-                loadAssignments(this.value, '');
+            var savedAssignId = assignSelect.value || '';
+
+            // core/form-autocomplete dispatches a native change event on the select.
+            $(courseSelect).on('change', function() {
+                loadAssignments(assignSelect, this.value, '');
             });
 
-            // On page load in edit mode, the hidden input already has a value.
-            // Trigger load so assignment list is populated with correct options.
-            if (courseInput.value && courseInput.value !== '0') {
-                loadAssignments(courseInput.value, savedAssignId);
+            // Edit mode: course is already selected — load its assignments.
+            if (courseSelect.value && courseSelect.value !== '0') {
+                loadAssignments(assignSelect, courseSelect.value, savedAssignId);
             }
         }
     };

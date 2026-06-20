@@ -6,6 +6,7 @@ $string['pluginname']               = 'Teaching Practice';
 $string['modulename']               = 'Teaching Practice';
 $string['modulenameplural']         = 'Teaching Practices';
 $string['modulename_help']          = 'The Teaching Practice activity allows students to receive their teaching practice completion certificate after evaluation by a Cooperating Teacher and Head Teacher.';
+$string['pluginadministration']    = 'Teaching Practice administration';
 
 // Capabilities
 $string['teachingpractice:addinstance']     = 'Add a new Teaching Practice activity';
@@ -40,6 +41,13 @@ $string['cooperating_teacher_name'] = 'Name of Cooperating Teacher';
 $string['subject_1']                = 'Subject 1';
 $string['subject_2']                = 'Subject 2 (optional)';
 $string['subject_3']                = 'Subject 3 (optional)';
+$string['trainee_teacher_name']     = 'Trainee Teacher Name';
+$string['section_a_heading']        = 'Section A: Teaching Practice Information';
+$string['submit_evaluation']        = 'Submit Evaluation';
+$string['certificate_title']        = 'Teaching Practice Completion Certificate';
+$string['certno_label']             = 'Certificate No.:';
+$string['certno_pending']           = 'To be issued';
+$string['certificate_subjects_intro']= 'During the teaching practice, the trainee teacher taught the following subject(s):';
 
 // Rating labels
 $string['rating_excellent']         = 'Excellent';
@@ -69,9 +77,12 @@ $string['msg_certificate_issued']      = 'Head Teacher evaluation submitted. Cer
 $string['msg_not_configured']          = 'This activity has not been fully configured yet. Please contact your administrator.';
 $string['msg_no_students']             = 'No students are currently enrolled in this course.';
 $string['msg_project_not_submitted_ct']= 'This student has not yet submitted their project. Evaluation cannot proceed.';
+$string['msg_section_a_autofetch_help'] = 'Teaching practice details are loaded automatically from the student\'s Moodle profile and linked assignment submission. Ensure the student profile (ID number, institution, custom profile fields) or assignment online text contains the required information.';
 
 // Error strings
 $string['error_no_performa']        = 'No evaluation record found for this student.';
 $string['error_not_complete']       = 'Certificate is not available yet. Both evaluations must be completed first.';
 $string['error_no_certificate']     = 'Certificate record not found. Please contact the administrator.';
 $string['error_invalid_role']       = 'You do not have an assigned role in this Teaching Practice activity. Please contact your administrator.';
+$string['error_end_before_start']   = 'End date cannot be earlier than start date.';
+$string['error_days_positive']      = 'Total days must be a positive number.';

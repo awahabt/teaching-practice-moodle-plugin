@@ -67,13 +67,11 @@ switch ($tp_role) {
     // =========================================================================
     case 'student':
 
-        echo $OUTPUT->header();
-        echo $OUTPUT->heading($instance->name, 2);
-
         $has_submitted = tp_has_submitted_project($USER->id, $instance->linked_assign);
 
         if (!$has_submitted) {
-            // Project not submitted yet
+            echo $OUTPUT->header();
+            echo $OUTPUT->heading($instance->name, 2);
             echo html_writer::div(
                 html_writer::tag('h4', 'Project Not Submitted Yet') .
                 html_writer::tag('p',
@@ -90,31 +88,32 @@ switch ($tp_role) {
             exit;
         }
 
-        // Check evaluation progress
-        $performa = tp_get_performa($instance->id, $USER->id);
+        $performa = tp_sync_student_performa($instance, $USER->id);
 
-        if (!$performa || $performa->status !== TP_STATUS_COMPLETED) {
-            $ct_done = $performa && in_array($performa->status, [TP_STATUS_CT_DONE, TP_STATUS_COMPLETED]);
-            $ht_done = $performa && $performa->status === TP_STATUS_COMPLETED;
-
-            echo html_writer::div(
-                html_writer::tag('h4', 'Evaluation In Progress') .
-                html_writer::tag('p', get_string('msg_evaluation_inprogress', 'mod_teachingpractice')) .
-                html_writer::tag('ul',
-                    html_writer::tag('li', ($ct_done ? '✅' : '⏳') . ' Cooperating Teacher Evaluation') .
-                    html_writer::tag('li', ($ht_done ? '✅' : '⏳') . ' Head Teacher Evaluation')
-                ),
-                'alert alert-info'
-            );
-            echo $OUTPUT->footer();
-            exit;
+        // Redirect before any output — certificate is ready.
+        if ($performa && $performa->status === TP_STATUS_COMPLETED) {
+            redirect(new moodle_url('/mod/teachingpractice/certificate.php', [
+                'id'        => $id,
+                'studentid' => $USER->id,
+            ]));
         }
 
-        // Certificate is ready — redirect to certificate page
-        redirect(new moodle_url('/mod/teachingpractice/certificate.php', [
-            'id'        => $id,
-            'studentid' => $USER->id,
-        ]));
+        echo $OUTPUT->header();
+        echo $OUTPUT->heading($instance->name, 2);
+
+        $ct_done = $performa && in_array($performa->status, [TP_STATUS_CT_DONE, TP_STATUS_COMPLETED]);
+        $ht_done = $performa && $performa->status === TP_STATUS_COMPLETED;
+
+        echo html_writer::div(
+            html_writer::tag('h4', 'Evaluation In Progress') .
+            html_writer::tag('p', get_string('msg_evaluation_inprogress', 'mod_teachingpractice')) .
+            html_writer::tag('ul',
+                html_writer::tag('li', ($ct_done ? '✅' : '⏳') . ' Cooperating Teacher Evaluation') .
+                html_writer::tag('li', ($ht_done ? '✅' : '⏳') . ' Head Teacher Evaluation')
+            ),
+            'alert alert-info'
+        );
+        echo $OUTPUT->footer();
         break;
 
     // =========================================================================
@@ -155,10 +154,7 @@ switch ($tp_role) {
 // =============================================================================
 function tp_render_teacher_dashboard($cmid, $instance, $context, $role, $OUTPUT, $DB) {
 
-    // Get the student role ID configured for this instance
-    $student_role_id = (int) $instance->student_role;
-    $students        = get_role_users($student_role_id, $context, false,
-        'u.id, u.firstname, u.lastname, u.email, u.idnumber');
+    $students = tp_get_instance_students($instance, $context);
 
     if (empty($students)) {
         echo $OUTPUT->notification(
@@ -179,6 +175,10 @@ function tp_render_teacher_dashboard($cmid, $instance, $context, $role, $OUTPUT,
     foreach ($students as $student) {
 
         $submitted = tp_has_submitted_project($student->id, $instance->linked_assign);
+
+        if ($submitted) {
+            tp_sync_student_performa($instance, $student->id);
+        }
 
         $project_badge = $submitted
             ? html_writer::span('✅ Submitted', 'badge badge-success')

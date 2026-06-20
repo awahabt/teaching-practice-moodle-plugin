@@ -35,6 +35,8 @@ $PAGE->set_course($course);
 $PAGE->set_cm($cm);
 $PAGE->set_title('Teaching Practice Certificate — ' . fullname($student));
 $PAGE->set_heading($course->fullname);
+$PAGE->set_pagelayout('popup');
+$PAGE->add_body_class('tp-certificate-page');
 
 // Certificate not ready yet
 if (!$performa || $performa->status !== TP_STATUS_COMPLETED) {
@@ -183,20 +185,61 @@ echo $OUTPUT->header();
     padding-top: 14px;
 }
 
-/* ── Print styles ────────────────────────────────────────────── */
+/* ── Print styles — certificate only, no Moodle chrome ───────── */
 @media print {
-    .no-print { display: none !important; }
+    @page {
+        margin: 12mm;
+        size: A4 portrait;
+    }
+
+    html, body {
+        height: auto !important;
+        overflow: visible !important;
+        background: #fff !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    body * {
+        visibility: hidden;
+    }
+
+    .no-print,
+    .no-print * {
+        display: none !important;
+        visibility: hidden !important;
+    }
+
+    .tp-certificate,
+    .tp-certificate * {
+        visibility: visible;
+    }
+
     .tp-certificate {
-        border: 4px double #1a3a6b;
-        box-shadow: none;
-        padding: 30px 40px;
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100% !important;
+        max-width: 100% !important;
+        margin: 0 !important;
+        padding: 24px 32px !important;
+        border: 4px double #1a3a6b !important;
+        box-shadow: none !important;
+        page-break-inside: avoid;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    .tp-certificate .eval-table th {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
     }
 }
 </style>
 
 <!-- Action buttons (hidden on print) -->
 <div class="no-print mb-3">
-    <button onclick="window.print()" class="btn btn-primary mr-2">
+    <button type="button" onclick="window.print();" class="btn btn-primary mr-2">
         🖨️ Print Certificate
     </button>
     <a href="<?php echo (new moodle_url('/mod/teachingpractice/view.php', ['id' => $cmid]))->out(); ?>"
