@@ -274,8 +274,8 @@ echo $OUTPUT->header();
         <p>
             This is to certify that
             <strong><?php echo fullname($student); ?></strong>,
-            Registration No.&nbsp;<strong><?php echo s($performa->registration_no); ?></strong>,
-            has successfully completed the Teaching Practice (Course Code:&nbsp;6997) at
+            Registration No.&nbsp;<strong><?php echo s($student->username); ?></strong>,
+            has successfully completed the Teaching Practice (Course Code:&nbsp;<?php echo s($course->shortname); ?>) at
             <strong><?php echo s($performa->school_name); ?></strong>
             from <strong><?php echo $start_date; ?></strong>
             to&nbsp;<strong><?php echo $end_date; ?></strong>,

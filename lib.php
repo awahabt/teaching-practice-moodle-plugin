@@ -23,6 +23,9 @@ define('TP_STATUS_COMPLETED', 'completed');
  */
 function teachingpractice_add_instance($data, $mform = null) {
     global $DB;
+    $data->student_role = 0;
+    $data->ct_role      = 0;
+    $data->ht_role      = 0;
     $data->timecreated  = time();
     $data->timemodified = time();
     return $DB->insert_record('teachingpractice', $data);
@@ -34,6 +37,9 @@ function teachingpractice_add_instance($data, $mform = null) {
  */
 function teachingpractice_update_instance($data, $mform = null) {
     global $DB;
+    $data->student_role = 0;
+    $data->ct_role      = 0;
+    $data->ht_role      = 0;
     $data->id           = $data->instance;
     $data->timemodified = time();
     return $DB->update_record('teachingpractice', $data);
@@ -402,10 +408,6 @@ function tp_fetch_moodle_section_a_data(stdClass $student, stdClass $instance) {
 function tp_sync_student_performa(stdClass $instance, $studentid) {
     global $DB;
 
-    if (!tp_has_submitted_project($studentid, $instance->linked_assign)) {
-        return null;
-    }
-
     $student = $DB->get_record('user', ['id' => $studentid], '*', MUST_EXIST);
     $fetched = tp_fetch_moodle_section_a_data($student, $instance);
     $performa = tp_get_performa($instance->id, $studentid);
@@ -484,6 +486,8 @@ function tp_format_certificate_date($timestamp) {
 // HELPER: Render Section A as certificate-style HTML
 // ============================================================================
 function tp_render_section_a_certificate($student, $data, array $options = []) {
+    global $DB, $COURSE;
+
     $certno = $options['certno'] ?? get_string('certno_pending', 'mod_teachingpractice');
     $subjects = array_filter([
         $data->subject_1 ?? '',
@@ -499,6 +503,20 @@ function tp_render_section_a_certificate($student, $data, array $options = []) {
     $enddate   = tp_format_certificate_date($data->end_date ?? 0);
     $days      = !empty($data->days_count) ? (int) $data->days_count : '—';
 
+    $course_shortname = '';
+    if (!empty($data->instanceid)) {
+        $tp = $DB->get_record('teachingpractice', ['id' => $data->instanceid]);
+        if ($tp) {
+            $c = $DB->get_record('course', ['id' => $tp->course]);
+            if ($c) {
+                $course_shortname = $c->shortname;
+            }
+        }
+    }
+    if (empty($course_shortname)) {
+        $course_shortname = $COURSE->shortname;
+    }
+
     $html = html_writer::start_div('tp-section-a-cert');
     $html .= html_writer::tag('div', get_string('certno_label', 'mod_teachingpractice') . ' ' .
         html_writer::tag('strong', s($certno)), ['class' => 'tp-cert-no']);
@@ -509,8 +527,8 @@ function tp_render_section_a_certificate($student, $data, array $options = []) {
     $html .= html_writer::tag('p',
         'This is to certify that Mr./Ms./Mrs. ' .
         html_writer::tag('strong', fullname($student)) . ', Registration No. ' .
-        html_writer::tag('strong', $val($data->registration_no ?? '')) .
-        ', has successfully completed the Teaching Practice (Course Code: 6997) at ' .
+        html_writer::tag('strong', s($student->username)) .
+        ', has successfully completed the Teaching Practice (Course Code: ' . s($course_shortname) . ') at ' .
         html_writer::tag('strong', $val($data->school_name ?? '')) .
         ' from ' . html_writer::tag('strong', $startdate) .
         ' to ' . html_writer::tag('strong', $enddate) .
@@ -609,14 +627,18 @@ function tp_get_user_role($instance, $context) {
     $user_roles    = get_user_roles($context, $USER->id, true);
     $user_role_ids = array_column($user_roles, 'roleid');
 
+    $ht_role = get_config('mod_teachingpractice', 'ht_role');
+    $ct_role = get_config('mod_teachingpractice', 'ct_role');
+    $student_role = get_config('mod_teachingpractice', 'student_role');
+
     // Priority: HT > CT > Student (in case someone has multiple roles)
-    if ($instance->ht_role && in_array((int)$instance->ht_role, $user_role_ids)) {
+    if ($ht_role && in_array((int)$ht_role, $user_role_ids)) {
         return 'ht';
     }
-    if ($instance->ct_role && in_array((int)$instance->ct_role, $user_role_ids)) {
+    if ($ct_role && in_array((int)$ct_role, $user_role_ids)) {
         return 'ct';
     }
-    if ($instance->student_role && in_array((int)$instance->student_role, $user_role_ids)) {
+    if ($student_role && in_array((int)$student_role, $user_role_ids)) {
         return 'student';
     }
 
@@ -634,7 +656,7 @@ function tp_get_instance_students($instance, $context) {
 
     $studentids = [];
     $coursecontext = $context->get_course_context(true);
-    $studentroleid = (int) $instance->student_role;
+    $studentroleid = (int) get_config('mod_teachingpractice', 'student_role');
 
     if ($studentroleid) {
         $enrolled = get_role_users(

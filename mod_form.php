@@ -106,40 +106,7 @@ class mod_teachingpractice_mod_form extends moodleform_mod {
             'Please select the project submission assignment.', 'required', null, 'client');
         $mform->addHelpButton('linked_assign', 'linked_assign', 'mod_teachingpractice');
 
-        // =====================================================================
-        // SECTION: Role Configuration
-        // =====================================================================
-        $mform->addElement('header', 'roles_heading',
-            get_string('roles_heading', 'mod_teachingpractice'));
-        $mform->setExpanded('roles_heading', true);
-
-        // Load all Moodle roles
-        $all_roles    = role_get_names(null, ROLENAME_ORIGINAL);
-        $role_options = ['' => '--- Select role ---'];
-        foreach ($all_roles as $role) {
-            $role_options[$role->id] = $role->localname;
-        }
-
-        // Student role
-        $mform->addElement('select', 'student_role',
-            get_string('student_role', 'mod_teachingpractice'), $role_options);
-        $mform->addRule('student_role',
-            'Please select the student role.', 'required', null, 'client');
-        $mform->addHelpButton('student_role', 'student_role', 'mod_teachingpractice');
-
-        // Cooperating Teacher role
-        $mform->addElement('select', 'ct_role',
-            get_string('ct_role', 'mod_teachingpractice'), $role_options);
-        $mform->addRule('ct_role',
-            'Please select the Cooperating Teacher role.', 'required', null, 'client');
-        $mform->addHelpButton('ct_role', 'ct_role', 'mod_teachingpractice');
-
-        // Head Teacher role
-        $mform->addElement('select', 'ht_role',
-            get_string('ht_role', 'mod_teachingpractice'), $role_options);
-        $mform->addRule('ht_role',
-            'Please select the Head Teacher role.', 'required', null, 'client');
-        $mform->addHelpButton('ht_role', 'ht_role', 'mod_teachingpractice');
+        // Roles configuration moved to global administration settings.
 
         // ── Standard Moodle fields ────────────────────────────────────────────
         $this->standard_grading_coursemodule_elements();
@@ -203,16 +170,7 @@ class mod_teachingpractice_mod_form extends moodleform_mod {
             $errors['linked_assign'] = 'Please select the project submission assignment.';
         }
 
-        // All three roles must be different
-        $roles = [
-            $data['student_role'] ?? '',
-            $data['ct_role']      ?? '',
-            $data['ht_role']      ?? '',
-        ];
-        $filled = array_filter($roles);
-        if (count($filled) === 3 && count($filled) !== count(array_unique($filled))) {
-            $errors['ht_role'] = 'Student Role, Cooperating Teacher Role, and Head Teacher Role must all be different.';
-        }
+        // Role validation is now handled at global configuration level.
 
         return $errors;
     }

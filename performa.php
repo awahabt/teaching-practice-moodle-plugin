@@ -41,11 +41,7 @@ if ($role === 'ct') {
 $student  = $DB->get_record('user', ['id' => $studentid], '*', MUST_EXIST);
 
 // Auto-sync Section A from Moodle (profile + linked assignment submission).
-if (tp_has_submitted_project($studentid, $instance->linked_assign)) {
-    $performa = tp_sync_student_performa($instance, $studentid);
-} else {
-    $performa = tp_get_performa($instance->id, $studentid);
-}
+$performa = tp_sync_student_performa($instance, $studentid);
 
 $PAGE->set_url(new moodle_url('/mod/teachingpractice/performa.php', [
     'id'        => $cmid,
@@ -82,13 +78,7 @@ if ($role === 'ct' && $performa && $performa->status !== TP_STATUS_PENDING) {
     redirect(new moodle_url('/mod/teachingpractice/view.php', ['id' => $cmid]));
 }
 
-// Guard: student must have submitted project before CT can evaluate
-if ($role === 'ct' && !tp_has_submitted_project($studentid, $instance->linked_assign)) {
-    \core\notification::error(
-        get_string('msg_project_not_submitted_ct', 'mod_teachingpractice')
-    );
-    redirect(new moodle_url('/mod/teachingpractice/view.php', ['id' => $cmid]));
-}
+// Removed student project submission guard for CT evaluation
 
 $sectiondata = tp_build_section_a_data($student, $performa, $instance);
 $certno = null;

@@ -32,9 +32,12 @@ require_capability('mod/teachingpractice:view', $context);
 $completion = new completion_info($course);
 $completion->set_module_viewed($cm);
 
-// Check plugin is fully configured
+$student_role = get_config('mod_teachingpractice', 'student_role');
+$ct_role      = get_config('mod_teachingpractice', 'ct_role');
+$ht_role      = get_config('mod_teachingpractice', 'ht_role');
+
 if (empty($instance->linked_course) || empty($instance->linked_assign) ||
-    empty($instance->student_role)  || empty($instance->ct_role) || empty($instance->ht_role)) {
+    empty($student_role)  || empty($ct_role) || empty($ht_role)) {
 
     $PAGE->set_url(new moodle_url('/mod/teachingpractice/view.php', ['id' => $id]));
     $PAGE->set_context($context);
@@ -67,11 +70,22 @@ switch ($tp_role) {
     // =========================================================================
     case 'student':
 
+        $performa = tp_sync_student_performa($instance, $USER->id);
+
+        // Redirect before any output — certificate is ready.
+        if ($performa && $performa->status === TP_STATUS_COMPLETED) {
+            redirect(new moodle_url('/mod/teachingpractice/certificate.php', [
+                'id'        => $id,
+                'studentid' => $USER->id,
+            ]));
+        }
+
+        echo $OUTPUT->header();
+        echo $OUTPUT->heading($instance->name, 2);
+
         $has_submitted = tp_has_submitted_project($USER->id, $instance->linked_assign);
 
         if (!$has_submitted) {
-            echo $OUTPUT->header();
-            echo $OUTPUT->heading($instance->name, 2);
             echo html_writer::div(
                 html_writer::tag('h4', 'Project Not Submitted Yet') .
                 html_writer::tag('p',
@@ -82,20 +96,8 @@ switch ($tp_role) {
                     '→ Go to the project submission course',
                     ['class' => 'btn btn-primary mt-2']
                 ),
-                'alert alert-warning'
+                'alert alert-warning mb-3'
             );
-            echo $OUTPUT->footer();
-            exit;
-        }
-
-        $performa = tp_sync_student_performa($instance, $USER->id);
-
-        // Redirect before any output — certificate is ready.
-        if ($performa && $performa->status === TP_STATUS_COMPLETED) {
-            redirect(new moodle_url('/mod/teachingpractice/certificate.php', [
-                'id'        => $id,
-                'studentid' => $USER->id,
-            ]));
         }
 
         echo $OUTPUT->header();
@@ -174,11 +176,8 @@ function tp_render_teacher_dashboard($cmid, $instance, $context, $role, $OUTPUT,
     $i = 1;
     foreach ($students as $student) {
 
+        tp_sync_student_performa($instance, $student->id);
         $submitted = tp_has_submitted_project($student->id, $instance->linked_assign);
-
-        if ($submitted) {
-            tp_sync_student_performa($instance, $student->id);
-        }
 
         $project_badge = $submitted
             ? html_writer::span('✅ Submitted', 'badge badge-success')
@@ -208,7 +207,7 @@ function tp_render_teacher_dashboard($cmid, $instance, $context, $role, $OUTPUT,
             $action = html_writer::link($cert_url, 'View Certificate',
                 ['class' => 'btn btn-sm btn-info']);
 
-        } elseif ($role === 'ct' && $submitted) {
+        } elseif ($role === 'ct') {
             if (!$performa || $performa->status === TP_STATUS_PENDING) {
                 $form_url = new moodle_url('/mod/teachingpractice/performa.php', [
                     'id'        => $cmid,
@@ -235,9 +234,6 @@ function tp_render_teacher_dashboard($cmid, $instance, $context, $role, $OUTPUT,
             } else {
                 $action = html_writer::span('Already Submitted', 'text-muted small');
             }
-
-        } elseif ($role === 'ct' && !$submitted) {
-            $action = html_writer::span('Project not submitted', 'text-muted small');
         }
 
         $table->data[] = [
