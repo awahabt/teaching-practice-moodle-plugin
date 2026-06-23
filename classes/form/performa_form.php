@@ -156,16 +156,12 @@ class performa_form extends moodleform {
                 $mform->setType($field, PARAM_ALPHA);
             }
 
-            // Overall recommendation — also radio buttons
-            $rec_radios = [];
-            foreach ($rec_opts as $val => $text) {
-                $rec_radios[] = $mform->createElement('radio', 'ht_overall_recommendation', '', $text, $val);
-            }
-            $mform->addGroup($rec_radios, 'ht_overall_recommendation_grp',
-                'Overall Recommendation', html_writer::empty_tag('br'), false);
-            $mform->addRule('ht_overall_recommendation_grp',
+            // Overall recommendation — select dropdown menu
+            $rec_opts_select = ['' => 'Choose...'] + $rec_opts;
+            $mform->addElement('select', 'ht_overall_recommendation', 'Overall Recommendation', $rec_opts_select);
+            $mform->addRule('ht_overall_recommendation',
                 'Please select an overall recommendation.', 'required', null, 'client');
-            $mform->setType('ht_overall_recommendation', PARAM_ALPHA);
+            $mform->setType('ht_overall_recommendation', PARAM_ALPHANUMEXT);
 
             $mform->addElement('textarea', 'ht_remarks',
                 'Additional Remarks (Optional)', ['rows' => 4, 'cols' => 60]);
@@ -209,19 +205,27 @@ class performa_form extends moodleform {
             // Check start_date and end_date validity
             $start_date = 0;
             if (!empty($data['ht_start_date'])) {
-                $start_date = make_timestamp(
-                    $data['ht_start_date']['year'],
-                    $data['ht_start_date']['month'],
-                    $data['ht_start_date']['day']
-                );
+                if (is_array($data['ht_start_date'])) {
+                    $start_date = make_timestamp(
+                        $data['ht_start_date']['year'],
+                        $data['ht_start_date']['month'],
+                        $data['ht_start_date']['day']
+                    );
+                } else {
+                    $start_date = (int)$data['ht_start_date'];
+                }
             }
             $end_date = 0;
             if (!empty($data['ht_end_date'])) {
-                $end_date = make_timestamp(
-                    $data['ht_end_date']['year'],
-                    $data['ht_end_date']['month'],
-                    $data['ht_end_date']['day']
-                );
+                if (is_array($data['ht_end_date'])) {
+                    $end_date = make_timestamp(
+                        $data['ht_end_date']['year'],
+                        $data['ht_end_date']['month'],
+                        $data['ht_end_date']['day']
+                    );
+                } else {
+                    $end_date = (int)$data['ht_end_date'];
+                }
             }
 
             if ($start_date && $end_date && $end_date < $start_date) {
