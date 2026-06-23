@@ -36,8 +36,7 @@ $student_role = get_config('mod_teachingpractice', 'student_role');
 $ct_role      = get_config('mod_teachingpractice', 'ct_role');
 $ht_role      = get_config('mod_teachingpractice', 'ht_role');
 
-if (empty($instance->linked_course) || empty($instance->linked_assign) ||
-    empty($student_role)  || empty($ct_role) || empty($ht_role)) {
+if (empty($student_role) || empty($ct_role) || empty($ht_role)) {
 
     $PAGE->set_url(new moodle_url('/mod/teachingpractice/view.php', ['id' => $id]));
     $PAGE->set_context($context);
@@ -69,52 +68,97 @@ switch ($tp_role) {
     // STUDENT VIEW
     // =========================================================================
     case 'student':
+        // ── Automatic matching: find the linked course enrolled by this student ────────
+        // Uses the current course shortname (e.g. WORKSHOP|9028|G1474|16BH|ODL|2513)
+        // to find another course with the same tail (9028|G1474|16BH|ODL|2513)
+        // that this student is enrolled in.
+        $matching_course = tp_find_matching_course($course->shortname, $course->id, $USER->id);
+        $matching_assign = $matching_course ? tp_find_matching_assignment($matching_course->id) : null;
+
+        if (!$matching_course || !$matching_assign) {
+            echo $OUTPUT->header();
+            echo $OUTPUT->heading($instance->name, 2);
+            echo html_writer::div(
+                html_writer::tag('h4', 'Course Not Found') .
+                html_writer::tag('p',
+                    'The linked project submission course could not be found automatically. ' .
+                    'Please make sure you are enrolled in the correct course ' .
+                    '(the course that shares the same code as this Teaching Practice course). ' .
+                    'If the problem persists, contact your administrator.'),
+                'alert alert-warning mb-3'
+            );
+            echo $OUTPUT->footer();
+            break;
+        }
 
         $performa = tp_sync_student_performa($instance, $USER->id);
 
-        // Redirect before any output — certificate is ready.
-        if ($performa && $performa->status === TP_STATUS_COMPLETED) {
-            redirect(new moodle_url('/mod/teachingpractice/certificate.php', [
-                'id'        => $id,
-                'studentid' => $USER->id,
-            ]));
+        // Show the student's current status — no submission gate here.
+        // The certificate page itself will block access if project is not submitted+graded.
+        $ct_done = $performa && in_array($performa->status, [TP_STATUS_CT_DONE, TP_STATUS_COMPLETED]);
+        $ht_done = $performa && $performa->status === TP_STATUS_COMPLETED;
+
+        // If certificate is ready AND project is submitted+graded → redirect to certificate.
+        if ($ht_done) {
+            $matching_assign_check = $matching_assign;
+            $proj_submitted_graded = $matching_assign_check
+                ? tp_is_assignment_submitted_and_graded($USER->id, $matching_assign_check->id)
+                : false;
+            if ($proj_submitted_graded) {
+                redirect(new moodle_url('/mod/teachingpractice/certificate.php', [
+                    'id'        => $id,
+                    'studentid' => $USER->id,
+                ]));
+            }
         }
 
         echo $OUTPUT->header();
         echo $OUTPUT->heading($instance->name, 2);
 
-        $has_submitted = tp_has_submitted_project($USER->id, $instance->linked_assign);
+        // Check submission status for display only
+        $submission_rec = $matching_assign ? $DB->get_record('assign_submission', [
+            'assignment' => $matching_assign->id,
+            'userid'     => $USER->id,
+            'latest'     => 1,
+        ]) : null;
+        $is_submitted = $submission_rec && in_array($submission_rec->status, ['submitted', 'graded']);
+        $is_graded    = $matching_assign ? tp_is_assignment_submitted_and_graded($USER->id, $matching_assign->id) : false;
 
-        if (!$has_submitted) {
+        if (!$is_submitted) {
             echo html_writer::div(
                 html_writer::tag('h4', 'Project Not Submitted Yet') .
-                html_writer::tag('p',
-                    get_string('msg_project_not_submitted', 'mod_teachingpractice')
-                ) .
+                html_writer::tag('p', get_string('msg_project_not_submitted', 'mod_teachingpractice')) .
                 html_writer::link(
-                    new moodle_url('/course/view.php', ['id' => $instance->linked_course]),
-                    '→ Go to the project submission course',
+                    new moodle_url('/course/view.php', ['id' => $matching_course->id]),
+                    '→ Go to the project submission course: ' . s($matching_course->fullname),
                     ['class' => 'btn btn-primary mt-2']
                 ),
                 'alert alert-warning mb-3'
             );
+        } elseif (!$is_graded) {
+            echo html_writer::div(
+                html_writer::tag('h4', 'Project Submitted — Awaiting Grade') .
+                html_writer::tag('p', 'Your project has been submitted successfully, but it has not been graded yet. The certificate will only be available once it has been graded.'),
+                'alert alert-info mb-3'
+            );
         }
 
-        echo $OUTPUT->header();
-        echo $OUTPUT->heading($instance->name, 2);
-
-        $ct_done = $performa && in_array($performa->status, [TP_STATUS_CT_DONE, TP_STATUS_COMPLETED]);
-        $ht_done = $performa && $performa->status === TP_STATUS_COMPLETED;
-
+        // Evaluation progress (always shown)
         echo html_writer::div(
-            html_writer::tag('h4', 'Evaluation In Progress') .
-            html_writer::tag('p', get_string('msg_evaluation_inprogress', 'mod_teachingpractice')) .
+            html_writer::tag('h4', 'Evaluation Status') .
             html_writer::tag('ul',
                 html_writer::tag('li', ($ct_done ? '✅' : '⏳') . ' Cooperating Teacher Evaluation') .
                 html_writer::tag('li', ($ht_done ? '✅' : '⏳') . ' Head Teacher Evaluation')
+            ) .
+            ($ht_done && !$is_graded
+                ? html_writer::tag('p',
+                    '⚠️ Both evaluations are complete. Your certificate will be available once your project is graded.',
+                    ['class' => 'mb-0'])
+                : ''
             ),
-            'alert alert-info'
+            'alert alert-' . ($ht_done ? 'success' : 'info')
         );
+
         echo $OUTPUT->footer();
         break;
 
@@ -174,14 +218,41 @@ function tp_render_teacher_dashboard($cmid, $instance, $context, $role, $OUTPUT,
     $table->attributes = ['class' => 'table table-bordered table-hover generaltable'];
 
     $i = 1;
+
+    // ── Resolve the linked course + assignment ONCE for this page (not per student) ──
+    // Automatic matching from the TP course shortname.
+    $tp_course       = $DB->get_record('course', ['id' => $instance->course]);
+    $matching_course = $tp_course ? tp_find_matching_course($tp_course->shortname, $tp_course->id) : null;
+    $matching_assign = $matching_course ? tp_find_matching_assignment($matching_course->id) : null;
+
     foreach ($students as $student) {
 
         tp_sync_student_performa($instance, $student->id);
-        $submitted = tp_has_submitted_project($student->id, $instance->linked_assign);
 
-        $project_badge = $submitted
-            ? html_writer::span('✅ Submitted', 'badge badge-success')
-            : html_writer::span('❌ Not Submitted', 'badge badge-danger');
+        $project_status = 'not_submitted';
+        if ($matching_assign) {
+            $submission = $DB->get_record('assign_submission', [
+                'assignment' => $matching_assign->id,
+                'userid'     => $student->id,
+                'latest'     => 1,
+            ]);
+            if ($submission && in_array($submission->status, ['submitted', 'graded'])) {
+                $submitted_and_graded = tp_is_assignment_submitted_and_graded($student->id, $matching_assign->id);
+                if ($submitted_and_graded) {
+                    $project_status = 'graded';
+                } else {
+                    $project_status = 'submitted';
+                }
+            }
+        }
+
+        if ($project_status === 'graded') {
+            $project_badge = html_writer::span('✅ Submitted & Graded', 'badge badge-success');
+        } elseif ($project_status === 'submitted') {
+            $project_badge = html_writer::span('⏳ Submitted, Not Graded', 'badge badge-warning');
+        } else {
+            $project_badge = html_writer::span('❌ Not Submitted', 'badge badge-danger');
+        }
 
         $performa  = tp_get_performa($instance->id, $student->id);
 
@@ -239,7 +310,7 @@ function tp_render_teacher_dashboard($cmid, $instance, $context, $role, $OUTPUT,
         $table->data[] = [
             $i++,
             fullname($student),
-            $student->idnumber ?: '—',
+            $student->username ?: '—',
             $project_badge,
             $ct_badge,
             $ht_badge,

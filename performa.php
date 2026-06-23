@@ -112,6 +112,19 @@ if ($data = $form->get_data()) {
             throw new moodle_exception('error_no_performa', 'mod_teachingpractice');
         }
 
+        // Validate all rating fields against the allowed whitelist.
+        $valid_ratings = array_keys(tp_get_rating_options());
+        $ct_rating_fields = [
+            'ct_subject_knowledge', 'ct_lesson_planning', 'ct_instructional_delivery',
+            'ct_classroom_management', 'ct_assessment_feedback', 'ct_professionalism',
+        ];
+        foreach ($ct_rating_fields as $rf) {
+            if (!in_array($data->$rf, $valid_ratings, true)) {
+                throw new moodle_exception('invalidparameter', 'error',
+                    '', null, 'Invalid rating value for field: ' . $rf);
+            }
+        }
+
         // Update existing record — Section A stays as submitted by the student.
         $performa->ct_subject_knowledge      = $data->ct_subject_knowledge;
         $performa->ct_lesson_planning        = $data->ct_lesson_planning;
@@ -133,6 +146,24 @@ if ($data = $form->get_data()) {
 
     } elseif ($role === 'ht') {
 
+        // Validate all HT rating fields against allowed whitelists.
+        $valid_ratings = array_keys(tp_get_rating_options());
+        $valid_recommendations = array_keys(tp_get_recommendation_options());
+        $ht_rating_fields = [
+            'ht_attendance', 'ht_punctuality', 'ht_participation_teaching',
+            'ht_participation_cocurricular', 'ht_professional_conduct',
+        ];
+        foreach ($ht_rating_fields as $rf) {
+            if (!in_array($data->$rf, $valid_ratings, true)) {
+                throw new moodle_exception('invalidparameter', 'error',
+                    '', null, 'Invalid rating value for field: ' . $rf);
+            }
+        }
+        if (!in_array($data->ht_overall_recommendation, $valid_recommendations, true)) {
+            throw new moodle_exception('invalidparameter', 'error',
+                '', null, 'Invalid recommendation value.');
+        }
+
         $performa->ht_attendance                 = $data->ht_attendance;
         $performa->ht_punctuality                = $data->ht_punctuality;
         $performa->ht_participation_teaching     = $data->ht_participation_teaching;
@@ -142,6 +173,21 @@ if ($data = $form->get_data()) {
         $performa->ht_remarks                    = $data->ht_remarks ?? '';
         $performa->ht_teacher_name               = $data->ht_teacher_name;
         $performa->ht_submitted_date             = time();
+
+        // Save Head Teacher entered date and subjects
+        $performa->start_date = (int) $data->ht_start_date;
+        $performa->end_date   = (int) $data->ht_end_date;
+
+        if ($performa->start_date && $performa->end_date) {
+            $days = round(($performa->end_date - $performa->start_date) / 86400) + 1;
+            $performa->days_count = ($days > 0) ? (int)$days : 0;
+        }
+
+        $selected_subjects = isset($data->ht_subjects) && is_array($data->ht_subjects) ? array_values($data->ht_subjects) : [];
+        $performa->subject_1  = isset($selected_subjects[0]) ? $selected_subjects[0] : '';
+        $performa->subject_2  = isset($selected_subjects[1]) ? $selected_subjects[1] : '';
+        $performa->subject_3  = isset($selected_subjects[2]) ? $selected_subjects[2] : '';
+
         $performa->timemodified                  = time();
         $DB->update_record('teachingpractice_performa', $performa);
 

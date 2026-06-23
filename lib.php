@@ -23,6 +23,8 @@ define('TP_STATUS_COMPLETED', 'completed');
  */
 function teachingpractice_add_instance($data, $mform = null) {
     global $DB;
+    $data->linked_course = 0;
+    $data->linked_assign = 0;
     $data->student_role = 0;
     $data->ct_role      = 0;
     $data->ht_role      = 0;
@@ -37,6 +39,8 @@ function teachingpractice_add_instance($data, $mform = null) {
  */
 function teachingpractice_update_instance($data, $mform = null) {
     global $DB;
+    $data->linked_course = 0;
+    $data->linked_assign = 0;
     $data->student_role = 0;
     $data->ct_role      = 0;
     $data->ht_role      = 0;
@@ -396,9 +400,21 @@ function tp_fetch_section_a_from_assignment($studentid, $assignid) {
 // Priority: assignment submission, then user profile / idnumber
 // ============================================================================
 function tp_fetch_moodle_section_a_data(stdClass $student, stdClass $instance) {
+    global $DB;
     $data = new stdClass();
     tp_merge_section_a_data($data, tp_fetch_section_a_from_profile($student));
-    tp_merge_section_a_data($data, tp_fetch_section_a_from_assignment($student->id, $instance->linked_assign));
+
+    // Automatically resolve the matching course and assignment from the shortname.
+    $course = $DB->get_record('course', ['id' => $instance->course]);
+    if ($course) {
+        $matching_course = tp_find_matching_course($course->shortname, $course->id);
+        if ($matching_course) {
+            $matching_assign = tp_find_matching_assignment($matching_course->id);
+            if ($matching_assign) {
+                tp_merge_section_a_data($data, tp_fetch_section_a_from_assignment($student->id, $matching_assign->id));
+            }
+        }
+    }
     return $data;
 }
 
@@ -509,12 +525,22 @@ function tp_render_section_a_certificate($student, $data, array $options = []) {
         if ($tp) {
             $c = $DB->get_record('course', ['id' => $tp->course]);
             if ($c) {
-                $course_shortname = $c->shortname;
+                $matching_course = tp_find_matching_course($c->shortname, $c->id);
+                if ($matching_course) {
+                    $course_shortname = $matching_course->shortname;
+                } else {
+                    $course_shortname = $c->shortname;
+                }
             }
         }
     }
     if (empty($course_shortname)) {
-        $course_shortname = $COURSE->shortname;
+        $matching_course = tp_find_matching_course($COURSE->shortname, $COURSE->id);
+        if ($matching_course) {
+            $course_shortname = $matching_course->shortname;
+        } else {
+            $course_shortname = $COURSE->shortname;
+        }
     }
 
     $html = html_writer::start_div('tp-section-a-cert');
@@ -532,8 +558,8 @@ function tp_render_section_a_certificate($student, $data, array $options = []) {
         html_writer::tag('strong', $val($data->school_name ?? '')) .
         ' from ' . html_writer::tag('strong', $startdate) .
         ' to ' . html_writer::tag('strong', $enddate) .
-        ', with timings ' .
-        html_writer::tag('strong', $val($data->morning_time ?? '') . ' – ' . $val($data->afternoon_time ?? '')) .
+        // ', with timings ' .
+        // html_writer::tag('strong', $val($data->morning_time ?? '') . ' – ' . $val($data->afternoon_time ?? '')) .
         ', completing a total of ' . html_writer::tag('strong', $days . ' days') .
         ' of teaching practice under the supervision of ' .
         html_writer::tag('strong', $val($data->cooperating_teacher_name ?? '')) . '.'
@@ -552,7 +578,7 @@ function tp_render_section_a_certificate($student, $data, array $options = []) {
 
     $html .= html_writer::tag('style', '
         .tp-section-a-cert {
-            border: 3px double #1a3a6b;
+            border: 3px solid #0d7215ff;
             padding: 24px 28px;
             margin: 0 0 20px;
             font-family: "Times New Roman", Times, serif;
@@ -561,12 +587,12 @@ function tp_render_section_a_certificate($student, $data, array $options = []) {
         }
         .tp-section-a-cert .tp-cert-no { text-align: right; font-size: 0.9rem; color: #666; margin-bottom: 8px; }
         .tp-section-a-cert .tp-cert-title {
-            text-align: center; font-size: 1.25rem; font-weight: bold; color: #1a3a6b;
+            text-align: center; font-size: 2rem; font-weight: bold; color: #0d7215ff;
             text-transform: uppercase; letter-spacing: 1px; margin: 12px 0 18px;
             text-decoration: underline;
         }
-        .tp-section-a-cert .tp-cert-body { font-size: 1rem; line-height: 1.85; text-align: justify; }
-        .tp-section-a-cert .tp-cert-body strong { color: #1a3a6b; }
+        .tp-section-a-cert .tp-cert-body { font-size: 1.2rem; line-height: 1.85; text-align: justify; }
+        .tp-section-a-cert .tp-cert-body strong { color: #0d7215ff; }
         .tp-section-a-cert .tp-cert-subjects { margin: 10px 0 0 24px; }
     ');
 
@@ -671,17 +697,25 @@ function tp_get_instance_students($instance, $context) {
         }
     }
 
-    if (!empty($instance->linked_assign)) {
-        $submittedids = $DB->get_fieldset_sql(
-            "SELECT DISTINCT s.userid
-               FROM {assign_submission} s
-              WHERE s.assignment = :assignid
-                AND s.latest = 1
-                AND s.status IN ('submitted', 'graded')",
-            ['assignid' => $instance->linked_assign]
-        );
-        foreach ($submittedids as $userid) {
-            $studentids[$userid] = $userid;
+    // Automatically resolve the matching assignment from the shortname.
+    $course = $DB->get_record('course', ['id' => $instance->course]);
+    if ($course) {
+        $matching_course = tp_find_matching_course($course->shortname, $course->id);
+        if ($matching_course) {
+            $matching_assign = tp_find_matching_assignment($matching_course->id);
+            if ($matching_assign) {
+                $submittedids = $DB->get_fieldset_sql(
+                    "SELECT DISTINCT s.userid
+                       FROM {assign_submission} s
+                      WHERE s.assignment = :assignid
+                        AND s.latest = 1
+                        AND s.status IN ('submitted', 'graded')",
+                    ['assignid' => $matching_assign->id]
+                );
+                foreach ($submittedids as $userid) {
+                    $studentids[$userid] = $userid;
+                }
+            }
         }
     }
 
@@ -765,3 +799,322 @@ function tp_issue_certificate($performa, $course_b_id) {
 
     return $cert_no;
 }
+
+// ============================================================================
+// HELPER: Parse course shortname segments.
+//
+// Pipe-delimited format:  TYPE|COURSECODE|GROUP|BATCH|MODE|SEMESTER
+// Example:                WORKSHOP|9028|G1474|16BH|ODL|2513
+//
+// Returns an array with:
+//   'pipe_format'  true if pipe-delimited
+//   'type'         first segment (e.g. WORKSHOP)
+//   'tail'         everything after the first segment (e.g. 9028|G1474|16BH|ODL|2513)
+//   'coursecode'   second segment (e.g. 9028)
+//   'semestercode' sixth segment (e.g. 2513)
+//   'parts'        all segments as array
+// ============================================================================
+function tp_parse_course_shortname($shortname) {
+    $shortname = trim($shortname);
+
+    // ── Pipe-delimited format ─────────────────────────────────────────────────
+    // e.g. WORKSHOP|9028|G1474|16BH|ODL|2513
+    if (strpos($shortname, '|') !== false) {
+        $parts = explode('|', $shortname);
+        $type  = isset($parts[0]) ? trim($parts[0]) : '';
+        // Tail = everything after the first segment, joined back with |
+        // e.g. for WORKSHOP|9028|G1474|16BH|ODL|2513 → 9028|G1474|16BH|ODL|2513
+        $tail_parts   = array_slice($parts, 1);
+        $tail         = implode('|', $tail_parts);
+        $coursecode   = isset($parts[1]) ? trim($parts[1]) : '';
+        $semestercode = isset($parts[5]) ? trim($parts[5]) : '';
+        return [
+            'pipe_format'  => true,
+            'type'         => $type,
+            'tail'         => $tail,
+            'coursecode'   => $coursecode,
+            'semestercode' => $semestercode,
+            'parts'        => $parts,
+        ];
+    }
+
+    // ── Legacy heuristic (non-pipe shortnames) ────────────────────────────────
+    $coursecode   = '';
+    $semestercode = '';
+
+    $semester_regex = '/\b(autumn|spring|sem)[-_]?[0-9]{2,4}\b/i';
+    if (preg_match($semester_regex, $shortname, $matches)) {
+        $semestercode = $matches[0];
+        $remaining    = str_replace($semestercode, '', $shortname);
+    } else {
+        $year_regex = '/[-_]?[0-9]{4}\b/';
+        if (preg_match($year_regex, $shortname, $matches)) {
+            $semestercode = trim($matches[0], '-_');
+            $remaining    = str_replace($matches[0], '', $shortname);
+        } else {
+            $remaining = $shortname;
+        }
+    }
+
+    $clean_regex = '/\b(tp|teachingpractice|teaching_practice)\b/i';
+    $remaining   = preg_replace($clean_regex, '', $remaining);
+    $remaining   = trim($remaining, ' -_');
+    $coursecode  = $remaining;
+
+    return [
+        'pipe_format'  => false,
+        'type'         => '',
+        'tail'         => '',
+        'coursecode'   => $coursecode,
+        'semestercode' => $semestercode,
+        'parts'        => [],
+    ];
+}
+
+// ============================================================================
+// HELPER: Find the matching linked Course based on current course shortname.
+//
+// For pipe-delimited shortnames (TYPE|COURSECODE|GROUP|BATCH|MODE|SEMESTER):
+//   Takes the TAIL = everything after the first segment (e.g. 9028|G1474|16BH|ODL|2513).
+//   Finds a course whose shortname EITHER:
+//     a) Equals the tail exactly  →  9028|G1474|16BH|ODL|2513
+//     b) Ends with |{tail}        →  ANYTHING|9028|G1474|16BH|ODL|2513
+//   Then prefers courses whose first segment is NOT a TP/WORKSHOP type.
+//
+//   Optionally narrows to courses the student ($userid) is enrolled in.
+//
+// Results are cached per request (static) to avoid repeated DB queries when
+// called inside loops (teacher dashboard renders one row per student).
+// ============================================================================
+function tp_find_matching_course($current_course_shortname, $exclude_course_id = 0, $userid = 0) {
+    global $DB;
+
+    // ── Static request-level cache ────────────────────────────────────────────
+    static $cache = [];
+    $cache_key = $current_course_shortname . '|excl:' . $exclude_course_id . '|u:' . $userid;
+    if (array_key_exists($cache_key, $cache)) {
+        return $cache[$cache_key];
+    }
+
+    $parsed      = tp_parse_course_shortname($current_course_shortname);
+    $is_pipe     = $parsed['pipe_format'];
+    $tail        = $parsed['tail'];
+    $coursecode  = $parsed['coursecode'];
+    $semestercode = $parsed['semestercode'];
+
+    $exclude_sql    = $exclude_course_id ? ' AND c.id != :excludeid' : '';
+    $exclude_params = $exclude_course_id ? ['excludeid' => $exclude_course_id] : [];
+
+    // ── Enrollment join (optional) ────────────────────────────────────────────
+    // When a student userid is provided, only consider courses they are enrolled in.
+    if ($userid > 0) {
+        $enrol_join = "JOIN {enrol} e        ON e.courseid = c.id AND e.status = 0
+                       JOIN {user_enrolments} ue ON ue.enrolid = e.id
+                                                AND ue.userid = :enrol_userid
+                                                AND ue.status = 0";
+        $enrol_params = ['enrol_userid' => $userid];
+    } else {
+        $enrol_join   = '';
+        $enrol_params = [];
+    }
+
+    // ── Pipe-format: exact-tail matching ─────────────────────────────────────
+    if ($is_pipe && !empty($tail)) {
+        // Strategy 1: exact match — shortname = tail (no type prefix at all)
+        $params1 = array_merge($exclude_params, $enrol_params, ['tail_exact' => $tail]);
+        $sql1 = "SELECT c.id, c.fullname, c.shortname
+                   FROM {course} c
+                   $enrol_join
+                  WHERE c.id > 1
+                    AND c.shortname = :tail_exact" . $exclude_sql;
+        $course = $DB->get_record_sql($sql1, $params1);
+        if ($course) {
+            $cache[$cache_key] = $course;
+            return $course;
+        }
+
+        // Strategy 2: shortname ends with |{tail} (has a different type prefix)
+        $like_tail = '%|' . $DB->sql_like_escape($tail);
+        $params2   = array_merge($exclude_params, $enrol_params, ['tail_like' => $like_tail]);
+        $sql2 = "SELECT c.id, c.fullname, c.shortname
+                   FROM {course} c
+                   $enrol_join
+                  WHERE c.id > 1
+                    AND " . $DB->sql_like('c.shortname', ':tail_like', false) .
+                    $exclude_sql . "
+                  ORDER BY c.id ASC";
+        $courses = $DB->get_records_sql($sql2, $params2, 0, 10);
+        if ($courses) {
+            // Prefer a course whose type prefix is NOT a TP/WORKSHOP course.
+            foreach ($courses as $c) {
+                $cparts = explode('|', $c->shortname);
+                $ctype  = strtolower(trim($cparts[0] ?? ''));
+                if (strpos($ctype, 'tp')       === false
+                 && strpos($ctype, 'workshop')  === false
+                 && strpos($ctype, 'teaching')  === false) {
+                    $cache[$cache_key] = $c;
+                    return $c;
+                }
+            }
+            // All results were TP-type — return the first non-excluded one.
+            $result = reset($courses);
+            $cache[$cache_key] = $result;
+            return $result;
+        }
+
+        // Strategy 3 (fallback): match by coursecode segment only (no semester check)
+        // e.g. find anything with |9028| in the shortname, excluding TP courses.
+        if (!empty($coursecode)) {
+            $like_code = '%|' . $DB->sql_like_escape($coursecode) . '|%';
+            $params3   = array_merge($exclude_params, $enrol_params, ['code_like' => $like_code]);
+            $sql3 = "SELECT c.id, c.fullname, c.shortname
+                       FROM {course} c
+                       $enrol_join
+                      WHERE c.id > 1
+                        AND " . $DB->sql_like('c.shortname', ':code_like', false) .
+                        $exclude_sql . "
+                      ORDER BY c.id ASC";
+            $courses3 = $DB->get_records_sql($sql3, $params3, 0, 10);
+            if ($courses3) {
+                foreach ($courses3 as $c) {
+                    $cparts = explode('|', $c->shortname);
+                    $ctype  = strtolower(trim($cparts[0] ?? ''));
+                    if (strpos($ctype, 'tp')      === false
+                     && strpos($ctype, 'workshop') === false
+                     && strpos($ctype, 'teaching') === false) {
+                        $cache[$cache_key] = $c;
+                        return $c;
+                    }
+                }
+                $result = reset($courses3);
+                $cache[$cache_key] = $result;
+                return $result;
+            }
+        }
+
+        $cache[$cache_key] = null;
+        return null;
+    }
+
+    // ── Legacy search strategy (non-pipe shortnames) ──────────────────────────
+    if (empty($coursecode)) {
+        $cache[$cache_key] = null;
+        return null;
+    }
+
+    $exclude_sql    = $exclude_course_id ? ' AND id != :excludeid' : '';
+
+    $candidates = [];
+    if (!empty($semestercode)) {
+        $candidates[] = $coursecode . '-' . $semestercode;
+        $candidates[] = $coursecode . '_' . $semestercode;
+        $candidates[] = $coursecode . ' ' . $semestercode;
+        $candidates[] = $coursecode . $semestercode;
+    }
+    $candidates[] = $coursecode;
+
+    foreach ($candidates as $candidate) {
+        $params = array_merge($exclude_params, ['shortname' => $candidate]);
+        $sql = "SELECT id, fullname, shortname FROM {course}
+                 WHERE id > 1 AND shortname = :shortname" . $exclude_sql;
+        $course = $DB->get_record_sql($sql, $params);
+        if ($course) {
+            $cache[$cache_key] = $course;
+            return $course;
+        }
+    }
+
+    if (!empty($semestercode)) {
+        $params = array_merge($exclude_params, ['search1' => '%' . $coursecode . '%' . $semestercode . '%']);
+        $sql = "SELECT id, fullname, shortname
+                  FROM {course}
+                 WHERE id > 1
+                   AND " . $DB->sql_like('shortname', ':search1', false) . $exclude_sql;
+        $course = $DB->get_record_sql($sql, $params);
+        if ($course) {
+            $cache[$cache_key] = $course;
+            return $course;
+        }
+    }
+
+    $params = array_merge($exclude_params, ['search2' => '%' . $coursecode . '%']);
+    $sql = "SELECT id, fullname, shortname
+              FROM {course}
+             WHERE id > 1
+               AND " . $DB->sql_like('shortname', ':search2', false) . $exclude_sql;
+    $courses = $DB->get_records_sql($sql, $params);
+    if ($courses) {
+        foreach ($courses as $c) {
+            if (stripos($c->shortname, 'tp') === false && stripos($c->shortname, 'teaching') === false) {
+                $cache[$cache_key] = $c;
+                return $c;
+            }
+        }
+        $result = reset($courses);
+        $cache[$cache_key] = $result;
+        return $result;
+    }
+
+    $cache[$cache_key] = null;
+    return null;
+}
+
+// ============================================================================
+// HELPER: Automatically find project submission assignment in Course A
+
+// ============================================================================
+function tp_find_matching_assignment($courseid) {
+    global $DB;
+    $assigns = $DB->get_records('assign', ['course' => $courseid], 'id ASC');
+    if (empty($assigns)) {
+        return null;
+    }
+    if (count($assigns) === 1) {
+        return reset($assigns);
+    }
+
+    // Prioritize names containing common keywords.
+    $keywords = ['teaching practice', 'teachingpractice', 'project', 'submission', 'assignment'];
+    foreach ($keywords as $keyword) {
+        foreach ($assigns as $a) {
+            if (stripos($a->name, $keyword) !== false) {
+                return $a;
+            }
+        }
+    }
+
+    return reset($assigns);
+}
+
+// ============================================================================
+// HELPER: Check if student's assignment has been submitted AND graded
+// ============================================================================
+function tp_is_assignment_submitted_and_graded($studentid, $assignmentid) {
+    global $DB;
+    if (!$assignmentid) {
+        return false;
+    }
+
+    $submission = $DB->get_record('assign_submission', [
+        'assignment' => $assignmentid,
+        'userid'     => $studentid,
+        'latest'     => 1,
+    ]);
+
+    if (!$submission || !in_array($submission->status, ['submitted', 'graded'])) {
+        return false;
+    }
+
+    // Check gradebook/assign_grades for a valid non-negative grade.
+    $grade = $DB->get_record('assign_grades', [
+        'assignment' => $assignmentid,
+        'userid'     => $studentid,
+    ]);
+
+    if (!$grade || $grade->grade === null || $grade->grade < 0) {
+        return false;
+    }
+
+    return true;
+}
+

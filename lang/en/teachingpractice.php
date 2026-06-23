@@ -67,7 +67,7 @@ $string['status_ct_done']           = 'CT Evaluation Submitted';
 $string['status_completed']         = 'Certificate Issued';
 
 // Notifications
-$string['msg_project_not_submitted']   = 'Your Teaching Practice certificate will be available here once you have submitted your project in the linked course and both evaluations have been completed.';
+$string['msg_project_not_submitted']   = 'Your Teaching Practice certificate will be available here once you have submitted your project in the submission course and both evaluations have been completed.';
 $string['msg_evaluation_inprogress']   = 'Your project has been submitted. Your certificate will appear here once both teachers complete their evaluations.';
 $string['msg_ct_already_submitted']    = 'You have already submitted the Cooperating Teacher evaluation for this student.';
 $string['msg_ht_wait_for_ct']          = 'Head Teacher evaluation cannot be submitted until the Cooperating Teacher has completed their evaluation first.';

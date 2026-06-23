@@ -38,7 +38,22 @@ $PAGE->set_heading($course->fullname);
 $PAGE->set_pagelayout('popup');
 $PAGE->add_body_class('tp-certificate-page');
 
-// Certificate not ready yet
+// Determine viewer role.
+$viewer_role = tp_get_user_role($instance, $context);
+
+// Prevent student from viewing other students' certificates.
+if ($viewer_role === 'student' && $USER->id != $student->id) {
+    throw new moodle_exception('nopermissiontoviewfortrainee', 'mod_teachingpractice');
+}
+
+// Find matching course and assignment to check student project submission status.
+$matching_course = tp_find_matching_course($course->shortname, $course->id);
+$matching_assign = $matching_course ? tp_find_matching_assignment($matching_course->id) : null;
+$submitted_and_graded = $matching_assign
+    ? tp_is_assignment_submitted_and_graded($student->id, $matching_assign->id)
+    : false;
+
+// ── Gate 1: Evaluations not yet complete ─────────────────────────────────────
 if (!$performa || $performa->status !== TP_STATUS_COMPLETED) {
     echo $OUTPUT->header();
     echo $OUTPUT->notification(
@@ -52,6 +67,41 @@ if (!$performa || $performa->status !== TP_STATUS_COMPLETED) {
     echo $OUTPUT->footer();
     exit;
 }
+
+// ── Gate 2: Project not submitted or not graded (only applies to student viewer) ───────────────────────────────
+// Both CT and HT evaluations are done, but the student's project must still
+// be submitted and graded before the student can download/view the certificate.
+if ($viewer_role === 'student' && !$submitted_and_graded) {
+    $submission_rec = $matching_assign ? $DB->get_record('assign_submission', [
+        'assignment' => $matching_assign->id,
+        'userid'     => $student->id,
+        'latest'     => 1,
+    ]) : null;
+    $is_submitted = $submission_rec && in_array($submission_rec->status, ['submitted', 'graded']);
+
+    echo $OUTPUT->header();
+    if (!$is_submitted) {
+        echo $OUTPUT->notification(
+            'The certificate cannot be issued yet because the student has not submitted their project assignment. ' .
+            'Please ensure the student submits their project in the submission course before the certificate can be downloaded.',
+            'warning'
+        );
+    } else {
+        echo $OUTPUT->notification(
+            'The certificate cannot be issued yet because the project assignment has not been graded. ' .
+            'Please grade the student\'s project submission in the submission course first.',
+            'warning'
+        );
+    }
+    echo html_writer::link(
+        new moodle_url('/mod/teachingpractice/view.php', ['id' => $cmid]),
+        '← Back',
+        ['class' => 'btn btn-secondary mt-2']
+    );
+    echo $OUTPUT->footer();
+    exit;
+}
+
 
 $certificate = $DB->get_record('teachingpractice_certificate', ['performaid' => $performa->id]);
 
@@ -82,7 +132,7 @@ echo $OUTPUT->header();
 <style>
 /* ── Certificate wrapper ─────────────────────────────────────── */
 .tp-certificate {
-    border: 6px double #1a3a6b;
+    border: 2px double #0d7215ff;
     padding: 44px 56px;
     max-width: 870px;
     margin: 0 auto 30px;
@@ -95,28 +145,28 @@ echo $OUTPUT->header();
 /* ── Header ──────────────────────────────────────────────────── */
 .tp-certificate .cert-header {
     text-align: center;
-    border-bottom: 2px solid #1a3a6b;
+    border-bottom: 2px solid #0d7215ff;
     padding-bottom: 18px;
     margin-bottom: 22px;
 }
 .tp-certificate .cert-header h2 {
-    color: #1a3a6b;
-    font-size: 1.85rem;
+    color: #0d7215ff;
+    font-size: 2rem;
     margin: 0 0 4px;
     letter-spacing: 1px;
 }
 .tp-certificate .cert-header p {
     margin: 2px 0;
-    font-size: 0.93rem;
+    font-size: 0.90rem;
     color: #555;
 }
 
 /* ── Certificate title ───────────────────────────────────────── */
 .tp-certificate .cert-title {
     text-align: center;
-    font-size: 1.45rem;
+    font-size: 1.50rem;
     font-weight: bold;
-    color: #1a3a6b;
+    color: #0d7215ff;
     text-transform: uppercase;
     letter-spacing: 2px;
     margin: 18px 0 26px;
@@ -125,15 +175,15 @@ echo $OUTPUT->header();
 
 /* ── Body text ───────────────────────────────────────────────── */
 .tp-certificate .cert-body {
-    font-size: 1.04rem;
+    font-size: 1rem;
     line-height: 1.95;
     text-align: justify;
 }
-.tp-certificate .cert-body strong { color: #1a3a6b; }
+.tp-certificate .cert-body strong { color: #0d7215ff; }
 
 /* ── Subject list ────────────────────────────────────────────── */
 .tp-certificate .cert-subjects {
-    margin: 14px 0 14px 30px;
+    margin: 10px 0 10px 30px;
 }
 .tp-certificate .cert-subjects li { margin: 4px 0; }
 
@@ -145,7 +195,7 @@ echo $OUTPUT->header();
     font-size: 0.94rem;
 }
 .tp-certificate .eval-table th {
-    background: #1a3a6b;
+    background: #0d7215ff;
     color: #fff;
     padding: 8px 12px;
     text-align: left;
@@ -161,7 +211,7 @@ echo $OUTPUT->header();
 /* ── Recommendation box ──────────────────────────────────────── */
 .tp-certificate .cert-recommendation {
     background: #eef3ff;
-    border-left: 4px solid #1a3a6b;
+    border-left: 4px solid #0d7215ff;
     padding: 10px 16px;
     margin: 18px 0;
     font-size: 1rem;
@@ -223,7 +273,7 @@ echo $OUTPUT->header();
         max-width: 100% !important;
         margin: 0 !important;
         padding: 24px 32px !important;
-        border: 4px double #1a3a6b !important;
+        border: 4px double #0d7215ff !important;
         box-shadow: none !important;
         page-break-inside: avoid;
         -webkit-print-color-adjust: exact;
@@ -275,16 +325,20 @@ echo $OUTPUT->header();
             This is to certify that
             <strong><?php echo fullname($student); ?></strong>,
             Registration No.&nbsp;<strong><?php echo s($student->username); ?></strong>,
-            has successfully completed the Teaching Practice (Course Code:&nbsp;<?php echo s($course->shortname); ?>) at
+            has successfully completed the Teaching Practice (Course Code:&nbsp;<?php echo s($matching_course ? $matching_course->shortname : $course->shortname); ?>) at
             <strong><?php echo s($performa->school_name); ?></strong>
             from <strong><?php echo $start_date; ?></strong>
             to&nbsp;<strong><?php echo $end_date; ?></strong>,
-            with timings
-            <strong><?php echo s($performa->morning_time); ?>&nbsp;–&nbsp;<?php echo s($performa->afternoon_time); ?></strong>,
+            <!-- with timings
+            <strong>
+                <?php echo s($performa->morning_time); ?>
+                &nbsp;–&nbsp;
+                <?php echo s($performa->afternoon_time); ?>
+            </strong>, -->
             completing a total of
             <strong><?php echo (int)$performa->days_count; ?>&nbsp;days</strong>
             of teaching practice under the supervision of
-            <strong><?php echo s($performa->cooperating_teacher_name); ?></strong>.
+            <strong><?php echo s($performa->ct_teacher_name); ?></strong>.
         </p>
 
         <?php if (!empty($subjects)): ?>
@@ -311,17 +365,17 @@ echo $OUTPUT->header();
         </thead>
         <tbody>
             <tr><td>Subject Knowledge</td>
-                <td><?php echo tp_rating_label($performa->ct_subject_knowledge); ?></td></tr>
+                <td><?php echo s(tp_rating_label($performa->ct_subject_knowledge)); ?></td></tr>
             <tr><td>Lesson Planning &amp; Preparation</td>
-                <td><?php echo tp_rating_label($performa->ct_lesson_planning); ?></td></tr>
+                <td><?php echo s(tp_rating_label($performa->ct_lesson_planning)); ?></td></tr>
             <tr><td>Instructional Delivery</td>
-                <td><?php echo tp_rating_label($performa->ct_instructional_delivery); ?></td></tr>
+                <td><?php echo s(tp_rating_label($performa->ct_instructional_delivery)); ?></td></tr>
             <tr><td>Classroom Management</td>
-                <td><?php echo tp_rating_label($performa->ct_classroom_management); ?></td></tr>
+                <td><?php echo s(tp_rating_label($performa->ct_classroom_management)); ?></td></tr>
             <tr><td>Assessment &amp; Feedback</td>
-                <td><?php echo tp_rating_label($performa->ct_assessment_feedback); ?></td></tr>
+                <td><?php echo s(tp_rating_label($performa->ct_assessment_feedback)); ?></td></tr>
             <tr><td>Professionalism &amp; Communication</td>
-                <td><?php echo tp_rating_label($performa->ct_professionalism); ?></td></tr>
+                <td><?php echo s(tp_rating_label($performa->ct_professionalism)); ?></td></tr>
         </tbody>
     </table>
     <?php if (!empty($performa->ct_remarks)): ?>
@@ -342,15 +396,15 @@ echo $OUTPUT->header();
         </thead>
         <tbody>
             <tr><td>Attendance and Regularity</td>
-                <td><?php echo tp_rating_label($performa->ht_attendance); ?></td></tr>
+                <td><?php echo s(tp_rating_label($performa->ht_attendance)); ?></td></tr>
             <tr><td>Punctuality</td>
-                <td><?php echo tp_rating_label($performa->ht_punctuality); ?></td></tr>
+                <td><?php echo s(tp_rating_label($performa->ht_punctuality)); ?></td></tr>
             <tr><td>Participation in Teaching–Learning Activities</td>
-                <td><?php echo tp_rating_label($performa->ht_participation_teaching); ?></td></tr>
+                <td><?php echo s(tp_rating_label($performa->ht_participation_teaching)); ?></td></tr>
             <tr><td>Participation in Co-curricular Activities</td>
-                <td><?php echo tp_rating_label($performa->ht_participation_cocurr); ?></td></tr>
+                <td><?php echo s(tp_rating_label($performa->ht_participation_cocurr)); ?></td></tr>
             <tr><td>Professional Conduct and Collaboration</td>
-                <td><?php echo tp_rating_label($performa->ht_professional_conduct); ?></td></tr>
+                <td><?php echo s(tp_rating_label($performa->ht_professional_conduct)); ?></td></tr>
         </tbody>
     </table>
     <?php if (!empty($performa->ht_remarks)): ?>
@@ -360,7 +414,7 @@ echo $OUTPUT->header();
     <!-- Overall Recommendation -->
     <div class="cert-recommendation">
         <strong>Overall Recommendation:</strong>
-        <?php echo tp_recommendation_label($performa->ht_overall_recommendation); ?>
+        <?php echo s(tp_recommendation_label($performa->ht_overall_recommendation)); ?>
     </div>
 
     <!-- Footer -->

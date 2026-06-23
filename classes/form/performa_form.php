@@ -92,6 +92,7 @@ class performa_form extends moodleform {
                 $mform->addGroup($radios, $field . '_grp', $label, '&nbsp;&nbsp;&nbsp;', false);
                 $mform->addRule($field . '_grp',
                     'Please select a rating for "' . $label . '".', 'required', null, 'client');
+                $mform->setType($field, PARAM_ALPHA);
             }
 
             $mform->addElement('textarea', 'ct_remarks',
@@ -115,8 +116,26 @@ class performa_form extends moodleform {
                 'Section C: Evaluation by Head Teacher');
             $mform->setExpanded('section_c', true);
 
+            // Start Date and End Date fields
+            $mform->addElement('date_selector', 'ht_start_date', 'Start Date of Teaching Practice');
+            $mform->addElement('date_selector', 'ht_end_date', 'End Date of Teaching Practice');
+
+            // Subjects autocomplete field (searchable dropdown)
+            $subjects_options = [
+                'Math' => 'Math',
+                'science' => 'Science',
+                'englishh' => 'English',
+                'urdu' => 'Urdu',
+                'istamiyaat' => 'Islamiyaat',
+                'history' => 'History',
+            ];
+            $mform->addElement('autocomplete', 'ht_subjects', 'Subjects Taught (Select at least 3)', $subjects_options, [
+                'multiple' => true,
+            ]);
+            $mform->setType('ht_subjects', PARAM_TEXT);
+
             $mform->addElement('html',
-                '<p class="text-muted mb-3">Please rate the trainee teacher on each criterion below.</p>');
+                '<p class="text-muted mb-3 mt-4">Please rate the trainee teacher on each criterion below.</p>');
 
             $ht_criteria = [
                 'ht_attendance'                 => '1. Attendance and Regularity',
@@ -134,6 +153,7 @@ class performa_form extends moodleform {
                 $mform->addGroup($radios, $field . '_grp', $label, '&nbsp;&nbsp;&nbsp;', false);
                 $mform->addRule($field . '_grp',
                     'Please select a rating for "' . $label . '".', 'required', null, 'client');
+                $mform->setType($field, PARAM_ALPHA);
             }
 
             // Overall recommendation — also radio buttons
@@ -145,6 +165,7 @@ class performa_form extends moodleform {
                 'Overall Recommendation', html_writer::empty_tag('br'), false);
             $mform->addRule('ht_overall_recommendation_grp',
                 'Please select an overall recommendation.', 'required', null, 'client');
+            $mform->setType('ht_overall_recommendation', PARAM_ALPHA);
 
             $mform->addElement('textarea', 'ht_remarks',
                 'Additional Remarks (Optional)', ['rows' => 4, 'cols' => 60]);
@@ -160,6 +181,21 @@ class performa_form extends moodleform {
         if ($performa) {
             $formdefaults = (array) $performa;
             unset($formdefaults['id']);
+
+            if ($role === 'ht') {
+                if (!empty($performa->start_date)) {
+                    $formdefaults['ht_start_date'] = $performa->start_date;
+                }
+                if (!empty($performa->end_date)) {
+                    $formdefaults['ht_end_date'] = $performa->end_date;
+                }
+                $selected_subjects = [];
+                if (!empty($performa->subject_1)) $selected_subjects[] = $performa->subject_1;
+                if (!empty($performa->subject_2)) $selected_subjects[] = $performa->subject_2;
+                if (!empty($performa->subject_3)) $selected_subjects[] = $performa->subject_3;
+                $formdefaults['ht_subjects'] = $selected_subjects;
+            }
+
             $this->set_data($formdefaults);
         }
 
@@ -168,6 +204,36 @@ class performa_form extends moodleform {
 
     public function validation($data, $files) {
         $errors = parent::validation($data, $files);
+
+        if (isset($data['role']) && $data['role'] === 'ht') {
+            // Check start_date and end_date validity
+            $start_date = 0;
+            if (!empty($data['ht_start_date'])) {
+                $start_date = make_timestamp(
+                    $data['ht_start_date']['year'],
+                    $data['ht_start_date']['month'],
+                    $data['ht_start_date']['day']
+                );
+            }
+            $end_date = 0;
+            if (!empty($data['ht_end_date'])) {
+                $end_date = make_timestamp(
+                    $data['ht_end_date']['year'],
+                    $data['ht_end_date']['month'],
+                    $data['ht_end_date']['day']
+                );
+            }
+
+            if ($start_date && $end_date && $end_date < $start_date) {
+                $errors['ht_end_date'] = 'End date cannot be earlier than start date.';
+            }
+
+            // Check subjects (must select at least 3)
+            if (empty($data['ht_subjects']) || !is_array($data['ht_subjects']) || count($data['ht_subjects']) < 3) {
+                $errors['ht_subjects'] = 'Please select at least 3 subjects.';
+            }
+        }
+
         return $errors;
     }
 }
