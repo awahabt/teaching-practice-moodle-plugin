@@ -520,6 +520,8 @@ function tp_render_section_a_certificate($student, $data, array $options = []) {
     $days      = !empty($data->days_count) ? (int) $data->days_count : '—';
 
     $course_shortname = '';
+    $matching_course = null;
+    $c = null;
     if (!empty($data->instanceid)) {
         $tp = $DB->get_record('teachingpractice', ['id' => $data->instanceid]);
         if ($tp) {
@@ -541,7 +543,12 @@ function tp_render_section_a_certificate($student, $data, array $options = []) {
         } else {
             $course_shortname = $COURSE->shortname;
         }
+        $c = $COURSE;
     }
+
+    $extracted = tp_extract_course_code_and_school_name($c ?: $COURSE, $matching_course);
+    $display_coursecode = !empty($extracted['coursecode']) ? $extracted['coursecode'] : $course_shortname;
+    $display_schoolname = !empty($extracted['schoolname']) ? $extracted['schoolname'] : ($data->school_name ?? '');
 
     $html = html_writer::start_div('tp-section-a-cert');
     $html .= html_writer::tag('div', get_string('certno_label', 'mod_teachingpractice') . ' ' .
@@ -553,9 +560,9 @@ function tp_render_section_a_certificate($student, $data, array $options = []) {
     $html .= html_writer::tag('p',
         'This is to certify that Mr./Ms./Mrs. ' .
         html_writer::tag('strong', fullname($student)) . ', Registration No. ' .
-        html_writer::tag('strong', s($student->username)) .
-        ', has successfully completed the Teaching Practice (Course Code: ' . s($course_shortname) . ') at ' .
-        html_writer::tag('strong', $val($data->school_name ?? '')) .
+        html_writer::tag('strong', s($student->email)) .
+        ', has successfully completed the Teaching Practice (Course Code: ' . s($display_coursecode) . ') at ' .
+        html_writer::tag('strong', $val($display_schoolname)) .
         ' from ' . html_writer::tag('strong', $startdate) .
         ' to ' . html_writer::tag('strong', $enddate) .
         // ', with timings ' .
@@ -798,6 +805,41 @@ function tp_issue_certificate($performa, $course_b_id) {
     $completion->mark_complete();
 
     return $cert_no;
+}
+
+/**
+ * Helper: Extract course code and school name from course full name if it follows the pipe-delimited format:
+ * "9028|Islamic Public School|16BH|ODL|2513"
+ *
+ * @param stdClass|null $course The current course object.
+ * @param stdClass|null $matching_course The matching submission course object.
+ * @return array Array containing 'coursecode' and 'schoolname' (both may be empty strings if not found).
+ */
+function tp_extract_course_code_and_school_name($course, $matching_course = null) {
+    $coursecode = '';
+    $schoolname = '';
+
+    // First try the matching course's fullname if available.
+    if ($matching_course && !empty($matching_course->fullname) && strpos($matching_course->fullname, '|') !== false) {
+        $fullname = $matching_course->fullname;
+    } else if ($course && !empty($course->fullname) && strpos($course->fullname, '|') !== false) {
+        $fullname = $course->fullname;
+    } else {
+        $fullname = '';
+    }
+
+    if ($fullname !== '') {
+        $parts = explode('|', $fullname);
+        if (count($parts) >= 2) {
+            $coursecode = trim($parts[0]);
+            $schoolname = trim($parts[1]);
+        }
+    }
+
+    return [
+        'coursecode' => $coursecode,
+        'schoolname' => $schoolname,
+    ];
 }
 
 // ============================================================================

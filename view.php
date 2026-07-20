@@ -77,7 +77,6 @@ switch ($tp_role) {
 
         if (!$matching_course || !$matching_assign) {
             echo $OUTPUT->header();
-            echo $OUTPUT->heading($instance->name, 2);
             echo html_writer::div(
                 html_writer::tag('h4', 'Course Not Found') .
                 html_writer::tag('p',
@@ -113,7 +112,6 @@ switch ($tp_role) {
         }
 
         echo $OUTPUT->header();
-        echo $OUTPUT->heading($instance->name, 2);
 
         // Check submission status for display only
         $submission_rec = $matching_assign ? $DB->get_record('assign_submission', [
@@ -310,7 +308,7 @@ function tp_render_teacher_dashboard($cmid, $instance, $context, $role, $OUTPUT,
         $table->data[] = [
             $i++,
             fullname($student),
-            $student->username ?: '—',
+            $student->email ?: '—',
             $project_badge,
             $ct_badge,
             $ht_badge,

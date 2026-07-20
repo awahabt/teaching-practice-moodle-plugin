@@ -126,6 +126,12 @@ $subjects = array_filter([
     $performa->subject_3,
 ]);
 
+// Extract course code and school name from fullname if formatted using pipes.
+$extracted = tp_extract_course_code_and_school_name($course, $matching_course);
+$display_coursecode = !empty($extracted['coursecode']) ? $extracted['coursecode'] : ($matching_course ? $matching_course->shortname : $course->shortname);
+$display_schoolname = !empty($extracted['schoolname']) ? $extracted['schoolname'] : $performa->school_name;
+
+
 echo $OUTPUT->header();
 ?>
 
@@ -324,9 +330,9 @@ echo $OUTPUT->header();
         <p>
             This is to certify that
             <strong><?php echo fullname($student); ?></strong>,
-            Registration No.&nbsp;<strong><?php echo s($student->username); ?></strong>,
-            has successfully completed the Teaching Practice (Course Code:&nbsp;<?php echo s($matching_course ? $matching_course->shortname : $course->shortname); ?>) at
-            <strong><?php echo s($performa->school_name); ?></strong>
+            Registration No.&nbsp;<strong><?php echo s($student->email); ?></strong>,
+            has successfully completed the Teaching Practice (Course Code:&nbsp;<?php echo s($display_coursecode); ?>) at
+            <strong><?php echo s($display_schoolname); ?></strong>
             from <strong><?php echo $start_date; ?></strong>
             to&nbsp;<strong><?php echo $end_date; ?></strong>,
             <!-- with timings
