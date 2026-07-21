@@ -97,32 +97,44 @@ switch ($tp_role) {
         $ct_done = $performa && in_array($performa->status, [TP_STATUS_CT_DONE, TP_STATUS_COMPLETED]);
         $ht_done = $performa && $performa->status === TP_STATUS_COMPLETED;
 
-        // If certificate is ready AND project is submitted+graded → redirect to certificate.
-        if ($ht_done) {
-            $matching_assign_check = $matching_assign;
-            $proj_submitted_graded = $matching_assign_check
-                ? tp_is_assignment_submitted_and_graded($USER->id, $matching_assign_check->id)
-                : false;
-            if ($proj_submitted_graded) {
-                redirect(new moodle_url('/mod/teachingpractice/certificate.php', [
-                    'id'        => $id,
-                    'studentid' => $USER->id,
-                ]));
-            }
+        // Compute average grade and pass/fail across all assignments in the linked course.
+        $student_avg_pct  = $matching_course
+            ? tp_get_student_average_grade_percentage($USER->id, $matching_course->id)
+            : null;
+        $student_passes   = $matching_course
+            ? tp_student_passes_course($USER->id, $matching_course->id)
+            : false;
+
+        // If certificate is ready AND student passes → redirect to certificate.
+        if ($ht_done && $student_passes) {
+            redirect(new moodle_url('/mod/teachingpractice/certificate.php', [
+                'id'        => $id,
+                'studentid' => $USER->id,
+            ]));
         }
 
         echo $OUTPUT->header();
 
-        // Check submission status for display only
-        $submission_rec = $matching_assign ? $DB->get_record('assign_submission', [
-            'assignment' => $matching_assign->id,
-            'userid'     => $USER->id,
-            'latest'     => 1,
-        ]) : null;
-        $is_submitted = $submission_rec && in_array($submission_rec->status, ['submitted', 'graded']);
-        $is_graded    = $matching_assign ? tp_is_assignment_submitted_and_graded($USER->id, $matching_assign->id) : false;
+        // Check submission status across all assignments in the linked course.
+        $has_any_submission = false;
+        $all_graded         = false;
+        if ($matching_course) {
+            $all_assigns = $DB->get_records('assign', ['course' => $matching_course->id], 'id ASC');
+            foreach ($all_assigns as $a) {
+                $sub = $DB->get_record('assign_submission', [
+                    'assignment' => $a->id,
+                    'userid'     => $USER->id,
+                    'latest'     => 1,
+                ]);
+                if ($sub && in_array($sub->status, ['submitted', 'graded'])) {
+                    $has_any_submission = true;
+                }
+            }
+            // "All graded" means we have at least one graded assignment (avg is not null).
+            $all_graded = ($student_avg_pct !== null);
+        }
 
-        if (!$is_submitted) {
+        if (!$has_any_submission) {
             echo html_writer::div(
                 html_writer::tag('h4', 'Project Not Submitted Yet') .
                 html_writer::tag('p', get_string('msg_project_not_submitted', 'mod_teachingpractice')) .
@@ -133,11 +145,32 @@ switch ($tp_role) {
                 ),
                 'alert alert-warning mb-3'
             );
-        } elseif (!$is_graded) {
+        } elseif (!$all_graded) {
             echo html_writer::div(
                 html_writer::tag('h4', 'Project Submitted — Awaiting Grade') .
-                html_writer::tag('p', 'Your project has been submitted successfully, but it has not been graded yet. The certificate will only be available once it has been graded.'),
+                html_writer::tag('p', 'Your project has been submitted successfully, but it has not been graded yet. The certificate will only be available once all assignments are graded.'),
                 'alert alert-info mb-3'
+            );
+        } elseif (!$student_passes) {
+            // Graded but did not meet the passing mark.
+            echo html_writer::div(
+                html_writer::tag('h4', '❌ Did Not Meet Passing Criteria') .
+                html_writer::tag('p',
+                    'Your average mark across all assignments is <strong>' . number_format($student_avg_pct, 1) . '%</strong>. ' .
+                    'The minimum passing mark is <strong>' . TP_PASSING_PERCENTAGE . '%</strong>. ' .
+                    'Please contact your instructor for further guidance.'
+                ),
+                'alert alert-danger mb-3'
+            );
+        } else {
+            // Passed but evaluations may still be pending.
+            echo html_writer::div(
+                html_writer::tag('h4', '✅ Project Passed') .
+                html_writer::tag('p',
+                    'Your average mark is <strong>' . number_format($student_avg_pct, 1) . '%</strong> ' .
+                    '(passing mark: ' . TP_PASSING_PERCENTAGE . '%). Your certificate will be available once both evaluations are complete.'
+                ),
+                'alert alert-success mb-3'
             );
         }
 
@@ -148,9 +181,9 @@ switch ($tp_role) {
                 html_writer::tag('li', ($ct_done ? '✅' : '⏳') . ' Cooperating Teacher Evaluation') .
                 html_writer::tag('li', ($ht_done ? '✅' : '⏳') . ' Head Teacher Evaluation')
             ) .
-            ($ht_done && !$is_graded
+            ($ht_done && !$student_passes
                 ? html_writer::tag('p',
-                    '⚠️ Both evaluations are complete. Your certificate will be available once your project is graded.',
+                    '⚠️ Both evaluations are complete but the certificate requires a passing grade.',
                     ['class' => 'mb-0'])
                 : ''
             ),

@@ -6,11 +6,16 @@
  * Moodle calls the teachingpractice_* functions automatically.
  */
 defined('MOODLE_INTERNAL') || die();
-
 // ── Status constants ─────────────────────────────────────────────────────────
 define('TP_STATUS_PENDING',   'pending');
 define('TP_STATUS_CT_DONE',   'ct_done');
 define('TP_STATUS_COMPLETED', 'completed');
+
+// ── Passing percentage ─────────────────────────────────────────────────────────
+// Change this single value to adjust the minimum average mark required for the
+// student to receive a certificate.  Example: 50 = 50 % average across all
+// graded assignments in the linked project-submission course.
+define('TP_PASSING_PERCENTAGE', 50);
 
 // ============================================================================
 // REQUIRED MOODLE MOD FUNCTIONS
@@ -127,7 +132,7 @@ function tp_rating_label($value) {
         'fair'             => 'Fair',
         'needsimprovement' => 'Needs Improvement',
     ];
-    return $map[$value] ?? '—';
+    return $map[$value] ?? '--';
 }
 
 // ============================================================================
@@ -139,7 +144,7 @@ function tp_recommendation_label($value) {
         'completed_minor'     => 'Successfully Completed with Minor Recommendations',
         'further_improvement' => 'Further Improvement Recommended',
     ];
-    return $map[$value] ?? '—';
+    return $map[$value] ?? '--';
 }
 
 // ============================================================================
@@ -493,7 +498,7 @@ function tp_has_section_a_data($performa) {
 // ============================================================================
 function tp_format_certificate_date($timestamp) {
     if (empty($timestamp)) {
-        return '—';
+        return '--';
     }
     return userdate($timestamp, '%d %B %Y');
 }
@@ -512,12 +517,12 @@ function tp_render_section_a_certificate($student, $data, array $options = []) {
     ]);
 
     $val = function($value) {
-        return !empty($value) ? s($value) : '—';
+        return !empty($value) ? s($value) : '--';
     };
 
     $startdate = tp_format_certificate_date($data->start_date ?? 0);
     $enddate   = tp_format_certificate_date($data->end_date ?? 0);
-    $days      = !empty($data->days_count) ? (int) $data->days_count : '—';
+    $days      = !empty($data->days_count) ? (int) $data->days_count : '--';
 
     $course_shortname = '';
     $matching_course = null;
@@ -566,7 +571,7 @@ function tp_render_section_a_certificate($student, $data, array $options = []) {
         ' from ' . html_writer::tag('strong', $startdate) .
         ' to ' . html_writer::tag('strong', $enddate) .
         // ', with timings ' .
-        // html_writer::tag('strong', $val($data->morning_time ?? '') . ' – ' . $val($data->afternoon_time ?? '')) .
+        // html_writer::tag('strong', $val($data->morning_time ?? '') . ' â€“ ' . $val($data->afternoon_time ?? '')) .
         ', completing a total of ' . html_writer::tag('strong', $days . ' days') .
         ' of teaching practice under the supervision of ' .
         html_writer::tag('strong', $val($data->cooperating_teacher_name ?? '')) . '.'
@@ -859,13 +864,13 @@ function tp_extract_course_code_and_school_name($course, $matching_course = null
 function tp_parse_course_shortname($shortname) {
     $shortname = trim($shortname);
 
-    // ── Pipe-delimited format ─────────────────────────────────────────────────
+    // â”€â”€ Pipe-delimited format â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // e.g. WORKSHOP|9028|G1474|16BH|ODL|2513
     if (strpos($shortname, '|') !== false) {
         $parts = explode('|', $shortname);
         $type  = isset($parts[0]) ? trim($parts[0]) : '';
         // Tail = everything after the first segment, joined back with |
-        // e.g. for WORKSHOP|9028|G1474|16BH|ODL|2513 → 9028|G1474|16BH|ODL|2513
+        // e.g. for WORKSHOP|9028|G1474|16BH|ODL|2513 â†’ 9028|G1474|16BH|ODL|2513
         $tail_parts   = array_slice($parts, 1);
         $tail         = implode('|', $tail_parts);
         $coursecode   = isset($parts[1]) ? trim($parts[1]) : '';
@@ -880,7 +885,7 @@ function tp_parse_course_shortname($shortname) {
         ];
     }
 
-    // ── Legacy heuristic (non-pipe shortnames) ────────────────────────────────
+    // â”€â”€ Legacy heuristic (non-pipe shortnames) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     $coursecode   = '';
     $semestercode = '';
 
@@ -919,8 +924,8 @@ function tp_parse_course_shortname($shortname) {
 // For pipe-delimited shortnames (TYPE|COURSECODE|GROUP|BATCH|MODE|SEMESTER):
 //   Takes the TAIL = everything after the first segment (e.g. 9028|G1474|16BH|ODL|2513).
 //   Finds a course whose shortname EITHER:
-//     a) Equals the tail exactly  →  9028|G1474|16BH|ODL|2513
-//     b) Ends with |{tail}        →  ANYTHING|9028|G1474|16BH|ODL|2513
+//     a) Equals the tail exactly  â†’  9028|G1474|16BH|ODL|2513
+//     b) Ends with |{tail}        â†’  ANYTHING|9028|G1474|16BH|ODL|2513
 //   Then prefers courses whose first segment is NOT a TP/WORKSHOP type.
 //
 //   Optionally narrows to courses the student ($userid) is enrolled in.
@@ -931,7 +936,7 @@ function tp_parse_course_shortname($shortname) {
 function tp_find_matching_course($current_course_shortname, $exclude_course_id = 0, $userid = 0) {
     global $DB;
 
-    // ── Static request-level cache ────────────────────────────────────────────
+    // â”€â”€ Static request-level cache â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     static $cache = [];
     $cache_key = $current_course_shortname . '|excl:' . $exclude_course_id . '|u:' . $userid;
     if (array_key_exists($cache_key, $cache)) {
@@ -947,7 +952,7 @@ function tp_find_matching_course($current_course_shortname, $exclude_course_id =
     $exclude_sql    = $exclude_course_id ? ' AND c.id != :excludeid' : '';
     $exclude_params = $exclude_course_id ? ['excludeid' => $exclude_course_id] : [];
 
-    // ── Enrollment join (optional) ────────────────────────────────────────────
+    // â”€â”€ Enrollment join (optional) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     // When a student userid is provided, only consider courses they are enrolled in.
     if ($userid > 0) {
         $enrol_join = "JOIN {enrol} e        ON e.courseid = c.id AND e.status = 0
@@ -960,9 +965,9 @@ function tp_find_matching_course($current_course_shortname, $exclude_course_id =
         $enrol_params = [];
     }
 
-    // ── Pipe-format: exact-tail matching ─────────────────────────────────────
+    // â”€â”€ Pipe-format: exact-tail matching â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if ($is_pipe && !empty($tail)) {
-        // Strategy 1: exact match — shortname = tail (no type prefix at all)
+        // Strategy 1: exact match â€” shortname = tail (no type prefix at all)
         $params1 = array_merge($exclude_params, $enrol_params, ['tail_exact' => $tail]);
         $sql1 = "SELECT c.id, c.fullname, c.shortname
                    FROM {course} c
@@ -998,7 +1003,7 @@ function tp_find_matching_course($current_course_shortname, $exclude_course_id =
                     return $c;
                 }
             }
-            // All results were TP-type — return the first non-excluded one.
+            // All results were TP-type â€” return the first non-excluded one.
             $result = reset($courses);
             $cache[$cache_key] = $result;
             return $result;
@@ -1038,7 +1043,7 @@ function tp_find_matching_course($current_course_shortname, $exclude_course_id =
         return null;
     }
 
-    // ── Legacy search strategy (non-pipe shortnames) ──────────────────────────
+    // â”€â”€ Legacy search strategy (non-pipe shortnames) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (empty($coursecode)) {
         $cache[$cache_key] = null;
         return null;
@@ -1159,4 +1164,66 @@ function tp_is_assignment_submitted_and_graded($studentid, $assignmentid) {
 
     return true;
 }
+// ============================================================================
+// HELPER: Compute student's average grade percentage across ALL assignments
+//         in a given course.
+//
+// Returns: float (0-100) average percentage if at least one assignment is
+//          graded, or null if no graded assignments exist yet.
+// ============================================================================
+function tp_get_student_average_grade_percentage($studentid, $courseid) {
+    global $DB;
 
+    // Fetch every assignment in this course.
+    $assigns = $DB->get_records('assign', ['course' => $courseid], 'id ASC');
+    if (empty($assigns)) {
+        return null;
+    }
+
+    $total_pct    = 0.0;
+    $graded_count = 0;
+
+    foreach ($assigns as $assign) {
+        // Skip assignments with no max grade defined.
+        if (empty($assign->grade) || $assign->grade <= 0) {
+            continue;
+        }
+
+        // Get the student's grade record for this assignment.
+        $grade_rec = $DB->get_record('assign_grades', [
+            'assignment' => $assign->id,
+            'userid'     => $studentid,
+        ]);
+
+        // Skip if not yet graded (null or negative = ungraded / no submission).
+        if (!$grade_rec || $grade_rec->grade === null || $grade_rec->grade < 0) {
+            continue;
+        }
+
+        // Compute percentage of max mark for this assignment.
+        $pct           = ($grade_rec->grade / $assign->grade) * 100.0;
+        $total_pct    += $pct;
+        $graded_count++;
+    }
+
+    if ($graded_count === 0) {
+        return null; // No graded assignments yet - cannot make a decision.
+    }
+
+    return round($total_pct / $graded_count, 2);
+}
+
+// ============================================================================
+// HELPER: Returns true if the student's average grade across all assignments
+//         in a course meets or exceeds TP_PASSING_PERCENTAGE.
+//
+// Returns: true  -> passed
+//          false -> failed or not yet graded
+// ============================================================================
+function tp_student_passes_course($studentid, $courseid) {
+    $avg = tp_get_student_average_grade_percentage($studentid, $courseid);
+    if ($avg === null) {
+        return false; // Not graded yet - treat as not passed.
+    }
+    return $avg >= TP_PASSING_PERCENTAGE;
+}

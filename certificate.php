@@ -46,12 +46,14 @@ if ($viewer_role === 'student' && $USER->id != $student->id) {
     throw new moodle_exception('nopermissiontoviewfortrainee', 'mod_teachingpractice');
 }
 
-// Find matching course and assignment to check student project submission status.
+// Find matching course to check student project pass/fail status.
 $matching_course = tp_find_matching_course($course->shortname, $course->id);
-$matching_assign = $matching_course ? tp_find_matching_assignment($matching_course->id) : null;
-$submitted_and_graded = $matching_assign
-    ? tp_is_assignment_submitted_and_graded($student->id, $matching_assign->id)
+$student_passes  = $matching_course
+    ? tp_student_passes_course($student->id, $matching_course->id)
     : false;
+$student_avg_pct = $matching_course
+    ? tp_get_student_average_grade_percentage($student->id, $matching_course->id)
+    : null;
 
 // ── Gate 1: Evaluations not yet complete ─────────────────────────────────────
 if (!$performa || $performa->status !== TP_STATUS_COMPLETED) {
@@ -68,29 +70,27 @@ if (!$performa || $performa->status !== TP_STATUS_COMPLETED) {
     exit;
 }
 
-// ── Gate 2: Project not submitted or not graded (only applies to student viewer) ───────────────────────────────
-// Both CT and HT evaluations are done, but the student's project must still
-// be submitted and graded before the student can download/view the certificate.
-if ($viewer_role === 'student' && !$submitted_and_graded) {
-    $submission_rec = $matching_assign ? $DB->get_record('assign_submission', [
-        'assignment' => $matching_assign->id,
-        'userid'     => $student->id,
-        'latest'     => 1,
-    ]) : null;
-    $is_submitted = $submission_rec && in_array($submission_rec->status, ['submitted', 'graded']);
-
+// ── Gate 2: Student has not met the passing grade criteria ───────────────────
+// Only applies when viewed by the student; CT / HT can always view certificates.
+if ($viewer_role === 'student' && !$student_passes) {
     echo $OUTPUT->header();
-    if (!$is_submitted) {
+    if ($student_avg_pct === null) {
+        // Assignments not yet graded.
         echo $OUTPUT->notification(
-            'The certificate cannot be issued yet because the student has not submitted their project assignment. ' .
-            'Please ensure the student submits their project in the submission course before the certificate can be downloaded.',
+            'The certificate cannot be shown yet because your assignments have not been graded. ' .
+            'Please ensure all your project assignments are submitted and graded before the certificate becomes available.',
             'warning'
         );
     } else {
-        echo $OUTPUT->notification(
-            'The certificate cannot be issued yet because the project assignment has not been graded. ' .
-            'Please grade the student\'s project submission in the submission course first.',
-            'warning'
+        // Graded but below passing mark.
+        echo html_writer::div(
+            html_writer::tag('h4', '❌ Certificate Not Available — Passing Mark Not Met') .
+            html_writer::tag('p',
+                'Your average mark across all assignments is <strong>' . number_format($student_avg_pct, 1) . '%</strong>. ' .
+                'The minimum passing mark required for a certificate is <strong>' . TP_PASSING_PERCENTAGE . '%</strong>. ' .
+                'Please contact your instructor for further guidance.'
+            ),
+            'alert alert-danger mb-3'
         );
     }
     echo html_writer::link(
