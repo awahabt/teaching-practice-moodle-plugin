@@ -123,14 +123,30 @@ class performa_form extends moodleform {
             // Subjects autocomplete field (searchable dropdown)
             $subjects_options = [
                 'Math' => 'Math',
-                'science' => 'Science',
-                'englishh' => 'English',
-                'urdu' => 'Urdu',
-                'istamiyaat' => 'Islamiyaat',
-                'history' => 'History',
+                'Science' => 'Science',
+                'English' => 'English',
+                'Urdu' => 'Urdu',
+                'Islamiyaat' => 'Islamiyaat',
+                'History' => 'History',
+                
             ];
+
+            // Dynamically add saved custom subjects to the options so they render as selected.
+            if ($performa && $role === 'ht') {
+                $predefined_keys = array_keys($subjects_options);
+                foreach (['subject_1', 'subject_2', 'subject_3'] as $field) {
+                    if (!empty($performa->$field)) {
+                        $val = $performa->$field;
+                        if (!in_array($val, $predefined_keys)) {
+                            $subjects_options[$val] = $val;
+                        }
+                    }
+                }
+            }
+
             $mform->addElement('autocomplete', 'ht_subjects', 'Subjects Taught (Select at least 3)', $subjects_options, [
                 'multiple' => true,
+                'tags' => true,
             ]);
             $mform->setType('ht_subjects', PARAM_TEXT);
 
@@ -235,6 +251,8 @@ class performa_form extends moodleform {
             // Check subjects (must select at least 3)
             if (empty($data['ht_subjects']) || !is_array($data['ht_subjects']) || count($data['ht_subjects']) < 3) {
                 $errors['ht_subjects'] = 'Please select at least 3 subjects.';
+            } else if (in_array('Other', $data['ht_subjects'])) {
+                $errors['ht_subjects'] = 'Please type your custom subject and press Enter, or remove "Other" from the list.';
             }
         }
 
