@@ -42,16 +42,9 @@ class performa_form extends moodleform {
         $mform->setType('role', PARAM_ALPHA);
 
         // =====================================================================
-        // SECTION A: Teaching Practice Information (certificate preview)
-        // Filled by the student. Shown read-only to CT and HT.
+        // SECTION A: Hidden fields (data carried through form submission)
+        // The certificate preview has been removed from this form.
         // =====================================================================
-        $mform->addElement('header', 'section_a',
-            get_string('section_a_heading', 'mod_teachingpractice'));
-        $mform->setExpanded('section_a', true);
-
-        $mform->addElement('html', tp_render_section_a_certificate($student, $sectiondata, [
-            'certno' => $certno,
-        ]));
 
         foreach (tp_section_a_field_names() as $field) {
             $mform->addElement('hidden', $field, $sectiondata->$field ?? '');
@@ -61,6 +54,7 @@ class performa_form extends moodleform {
                 $mform->setType($field, PARAM_TEXT);
             }
         }
+
 
         // =====================================================================
         // SECTION B: Cooperating Teacher Evaluation (radio buttons)
