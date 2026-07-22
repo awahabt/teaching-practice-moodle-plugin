@@ -86,3 +86,5 @@ $string['error_no_certificate']     = 'Certificate record not found. Please cont
 $string['error_invalid_role']       = 'You do not have an assigned role in this Teaching Practice activity. Please contact your administrator.';
 $string['error_end_before_start']   = 'End date cannot be earlier than start date.';
 $string['error_days_positive']      = 'Total days must be a positive number.';
+$string['error_course_not_linked']   = 'Evaluation cannot be performed because the project submission course is not linked or has matching errors.';
+

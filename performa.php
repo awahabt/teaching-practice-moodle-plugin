@@ -38,6 +38,34 @@ if ($role === 'ct') {
     require_capability('mod/teachingpractice:fillht', $context);
 }
 
+// Ensure the course is fully linked and matched before allowing evaluation.
+$matching_course = tp_find_matching_course($course->shortname, $course->id);
+$course_fully_linked = false;
+if ($matching_course) {
+    $parsed = tp_parse_course_shortname($course->shortname);
+    $coursecode   = !empty($parsed['coursecode']) ? $parsed['coursecode'] : 'N/A';
+    $modecode     = !empty($parsed['modecode']) ? $parsed['modecode'] : 'N/A';
+    $semestercode = !empty($parsed['semestercode']) ? $parsed['semestercode'] : 'N/A';
+
+    $m_parsed = tp_parse_course_shortname($matching_course->shortname);
+    $m_coursecode   = !empty($m_parsed['coursecode']) ? $m_parsed['coursecode'] : '';
+    $m_modecode     = !empty($m_parsed['modecode']) ? $m_parsed['modecode'] : '';
+    $m_semestercode = !empty($m_parsed['semestercode']) ? $m_parsed['semestercode'] : '';
+
+    $mode_mismatch = (strval($modecode) !== 'N/A' && $m_modecode !== '' && strcasecmp($modecode, $m_modecode) !== 0);
+    $sem_mismatch  = (strval($semestercode) !== 'N/A' && $m_semestercode !== '' && strcasecmp($semestercode, $m_semestercode) !== 0);
+
+    if (!$mode_mismatch && !$sem_mismatch) {
+        $course_fully_linked = true;
+    }
+}
+
+if (!$course_fully_linked) {
+    throw new moodle_exception('error_course_not_linked', 'mod_teachingpractice', '', null,
+        'Evaluation cannot be performed because the project submission course is not linked or has matching errors.');
+}
+
+
 $student  = $DB->get_record('user', ['id' => $studentid], '*', MUST_EXIST);
 
 // Auto-sync Section A from Moodle (profile + linked assignment submission).

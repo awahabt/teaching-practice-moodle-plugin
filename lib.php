@@ -864,28 +864,41 @@ function tp_extract_course_code_and_school_name($course, $matching_course = null
 function tp_parse_course_shortname($shortname) {
     $shortname = trim($shortname);
 
-    // â”€â”€ Pipe-delimited format â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    // e.g. WORKSHOP|9028|G1474|16BH|ODL|2513
+    // ── Pipe-delimited format ─────────────────────────────────────────────────
+    // e.g. WORKSHOP|9028|G1474|16BH|ODL|2513 (6 parts with type prefix)
+    // or e.g. 9028|G1474|16BH|ODL|2513 (5 parts without type prefix)
     if (strpos($shortname, '|') !== false) {
-        $parts = explode('|', $shortname);
-        $type  = isset($parts[0]) ? trim($parts[0]) : '';
-        // Tail = everything after the first segment, joined back with |
-        // e.g. for WORKSHOP|9028|G1474|16BH|ODL|2513 â†’ 9028|G1474|16BH|ODL|2513
-        $tail_parts   = array_slice($parts, 1);
-        $tail         = implode('|', $tail_parts);
-        $coursecode   = isset($parts[1]) ? trim($parts[1]) : '';
-        $semestercode = isset($parts[5]) ? trim($parts[5]) : '';
+        $parts = array_map('trim', explode('|', $shortname));
+
+        if (count($parts) === 5 || (isset($parts[0]) && is_numeric($parts[0]))) {
+            // 5-part shortname: 9028 | G1474 | 16BH | ODL | 2513
+            $type         = '';
+            $coursecode   = isset($parts[0]) ? $parts[0] : '';
+            $modecode     = isset($parts[3]) ? $parts[3] : '';
+            $semestercode = isset($parts[4]) ? $parts[4] : '';
+            $tail         = $shortname;
+        } else {
+            // 6-part shortname: WORKSHOP | 9028 | G1474 | 16BH | ODL | 2513
+            $type         = isset($parts[0]) ? $parts[0] : '';
+            $tail_parts   = array_slice($parts, 1);
+            $tail         = implode('|', $tail_parts);
+            $coursecode   = isset($parts[1]) ? $parts[1] : '';
+            $modecode     = isset($parts[4]) ? $parts[4] : '';
+            $semestercode = isset($parts[5]) ? $parts[5] : '';
+        }
+
         return [
             'pipe_format'  => true,
             'type'         => $type,
             'tail'         => $tail,
             'coursecode'   => $coursecode,
+            'modecode'     => $modecode,
             'semestercode' => $semestercode,
             'parts'        => $parts,
         ];
     }
 
-    // â”€â”€ Legacy heuristic (non-pipe shortnames) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // Legacy heuristic (non-pipe shortnames)
     $coursecode   = '';
     $semestercode = '';
 
@@ -913,6 +926,7 @@ function tp_parse_course_shortname($shortname) {
         'type'         => '',
         'tail'         => '',
         'coursecode'   => $coursecode,
+        'modecode'     => '',
         'semestercode' => $semestercode,
         'parts'        => [],
     ];
@@ -921,39 +935,37 @@ function tp_parse_course_shortname($shortname) {
 // ============================================================================
 // HELPER: Find the matching linked Course based on current course shortname.
 //
-// For pipe-delimited shortnames (TYPE|COURSECODE|GROUP|BATCH|MODE|SEMESTER):
-//   Takes the TAIL = everything after the first segment (e.g. 9028|G1474|16BH|ODL|2513).
-//   Finds a course whose shortname EITHER:
-//     a) Equals the tail exactly  â†’  9028|G1474|16BH|ODL|2513
-//     b) Ends with |{tail}        â†’  ANYTHING|9028|G1474|16BH|ODL|2513
-//   Then prefers courses whose first segment is NOT a TP/WORKSHOP type.
+// Matching rule (pipe-delimited shortnames TYPE|COURSECODE|GROUP|BATCH|MODE|SEMESTER):
+//   Extracts coursecode   = segment[1] or segment[0]
+//   Extracts modecode     = segment[4] or segment[3]
+//   Extracts semestercode = segment[5] or segment[4]
 //
-//   Optionally narrows to courses the student ($userid) is enrolled in.
+//   Finds any other course that has the SAME coursecode, SAME mode, and SAME semester.
+//   The assignment course does NOT need any specific type prefix (it can be ASSIGN,
+//   COURSE, ED, or have no prefix at all).
 //
-// Results are cached per request (static) to avoid repeated DB queries when
-// called inside loops (teacher dashboard renders one row per student).
+// Results are cached per request to avoid repeated DB queries inside loops.
 // ============================================================================
 function tp_find_matching_course($current_course_shortname, $exclude_course_id = 0, $userid = 0) {
     global $DB;
 
-    // â”€â”€ Static request-level cache â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // Static request-level cache
     static $cache = [];
     $cache_key = $current_course_shortname . '|excl:' . $exclude_course_id . '|u:' . $userid;
     if (array_key_exists($cache_key, $cache)) {
         return $cache[$cache_key];
     }
 
-    $parsed      = tp_parse_course_shortname($current_course_shortname);
-    $is_pipe     = $parsed['pipe_format'];
-    $tail        = $parsed['tail'];
-    $coursecode  = $parsed['coursecode'];
+    $parsed       = tp_parse_course_shortname($current_course_shortname);
+    $is_pipe      = $parsed['pipe_format'];
+    $coursecode   = $parsed['coursecode'];
+    $modecode     = $parsed['modecode'];
     $semestercode = $parsed['semestercode'];
 
     $exclude_sql    = $exclude_course_id ? ' AND c.id != :excludeid' : '';
     $exclude_params = $exclude_course_id ? ['excludeid' => $exclude_course_id] : [];
 
-    // â”€â”€ Enrollment join (optional) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    // When a student userid is provided, only consider courses they are enrolled in.
+    // Enrollment join (optional): narrow to courses the student is enrolled in.
     if ($userid > 0) {
         $enrol_join = "JOIN {enrol} e        ON e.courseid = c.id AND e.status = 0
                        JOIN {user_enrolments} ue ON ue.enrolid = e.id
@@ -965,91 +977,164 @@ function tp_find_matching_course($current_course_shortname, $exclude_course_id =
         $enrol_params = [];
     }
 
-    // â”€â”€ Pipe-format: exact-tail matching â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    if ($is_pipe && !empty($tail)) {
-        // Strategy 1: exact match â€” shortname = tail (no type prefix at all)
-        $params1 = array_merge($exclude_params, $enrol_params, ['tail_exact' => $tail]);
-        $sql1 = "SELECT c.id, c.fullname, c.shortname
-                   FROM {course} c
-                   $enrol_join
-                  WHERE c.id > 1
-                    AND c.shortname = :tail_exact" . $exclude_sql;
-        $course = $DB->get_record_sql($sql1, $params1);
-        if ($course) {
-            $cache[$cache_key] = $course;
-            return $course;
-        }
+    // =========================================================================
+    // PIPE FORMAT: Match by COURSECODE + MODE + SEMESTER
+    // =========================================================================
+    if ($is_pipe && !empty($coursecode)) {
 
-        // Strategy 2: shortname ends with |{tail} (has a different type prefix)
-        $like_tail = '%|' . $DB->sql_like_escape($tail);
-        $params2   = array_merge($exclude_params, $enrol_params, ['tail_like' => $like_tail]);
-        $sql2 = "SELECT c.id, c.fullname, c.shortname
-                   FROM {course} c
-                   $enrol_join
-                  WHERE c.id > 1
-                    AND " . $DB->sql_like('c.shortname', ':tail_like', false) .
-                    $exclude_sql . "
-                  ORDER BY c.id ASC";
-        $courses = $DB->get_records_sql($sql2, $params2, 0, 10);
-        if ($courses) {
-            // Prefer a course whose type prefix is NOT a TP/WORKSHOP course.
-            foreach ($courses as $c) {
-                $cparts = explode('|', $c->shortname);
-                $ctype  = strtolower(trim($cparts[0] ?? ''));
-                if (strpos($ctype, 'tp')       === false
-                 && strpos($ctype, 'workshop')  === false
-                 && strpos($ctype, 'teaching')  === false) {
-                    $cache[$cache_key] = $c;
-                    return $c;
+        // Strategy 1: Match Course Code + Study Mode + Semester Code
+        if (!empty($semestercode) && !empty($modecode)) {
+            $like_code = '%' . $DB->sql_like_escape($coursecode) . '%';
+            $like_sem  = '%' . $DB->sql_like_escape($semestercode) . '%';
+
+            $params = array_merge($exclude_params, $enrol_params, [
+                'code_like' => $like_code,
+                'sem_like'  => $like_sem,
+            ]);
+
+            $sql = "SELECT c.id, c.fullname, c.shortname
+                      FROM {course} c
+                      $enrol_join
+                     WHERE c.id > 1
+                       AND " . $DB->sql_like('c.shortname', ':code_like', false) . "
+                       AND " . $DB->sql_like('c.shortname', ':sem_like',  false) .
+                       $exclude_sql . "
+                     ORDER BY c.id ASC";
+
+            $candidates = $DB->get_records_sql($sql, $params, 0, 20);
+
+            $non_tp = [];
+            $tp_type = [];
+
+            foreach ($candidates as $c) {
+                $cp    = tp_parse_course_shortname($c->shortname);
+                $ccode = $cp['coursecode'];
+                $cmode = $cp['modecode'];
+                $csem  = $cp['semestercode'];
+
+                // Exact match required for code, mode, and semester.
+                if (strcasecmp($ccode, $coursecode) !== 0 ||
+                    (!empty($modecode) && !empty($cmode) && strcasecmp($cmode, $modecode) !== 0) ||
+                    (!empty($semestercode) && !empty($csem) && strcasecmp($csem, $semestercode) !== 0)) {
+                    continue;
+                }
+
+                $ctype = strtolower($cp['type']);
+                $is_tp = ($ctype !== '' && (strpos($ctype, 'tp') !== false
+                       || strpos($ctype, 'workshop') !== false
+                       || strpos($ctype, 'teaching') !== false));
+
+                if ($is_tp) {
+                    $tp_type[] = $c;
+                } else {
+                    $non_tp[] = $c;
                 }
             }
-            // All results were TP-type â€” return the first non-excluded one.
-            $result = reset($courses);
-            $cache[$cache_key] = $result;
-            return $result;
-        }
 
-        // Strategy 3 (fallback): match by coursecode segment only (no semester check)
-        // e.g. find anything with |9028| in the shortname, excluding TP courses.
-        if (!empty($coursecode)) {
-            $like_code = '%|' . $DB->sql_like_escape($coursecode) . '|%';
-            $params3   = array_merge($exclude_params, $enrol_params, ['code_like' => $like_code]);
-            $sql3 = "SELECT c.id, c.fullname, c.shortname
-                       FROM {course} c
-                       $enrol_join
-                      WHERE c.id > 1
-                        AND " . $DB->sql_like('c.shortname', ':code_like', false) .
-                        $exclude_sql . "
-                      ORDER BY c.id ASC";
-            $courses3 = $DB->get_records_sql($sql3, $params3, 0, 10);
-            if ($courses3) {
-                foreach ($courses3 as $c) {
-                    $cparts = explode('|', $c->shortname);
-                    $ctype  = strtolower(trim($cparts[0] ?? ''));
-                    if (strpos($ctype, 'tp')      === false
-                     && strpos($ctype, 'workshop') === false
-                     && strpos($ctype, 'teaching') === false) {
-                        $cache[$cache_key] = $c;
-                        return $c;
-                    }
-                }
-                $result = reset($courses3);
+            $result = !empty($non_tp) ? reset($non_tp) : (!empty($tp_type) ? reset($tp_type) : null);
+            if ($result) {
                 $cache[$cache_key] = $result;
                 return $result;
             }
         }
 
+        // Strategy 2: Fallback to Course Code + Semester Code match
+        if (!empty($semestercode)) {
+            $like_code = '%' . $DB->sql_like_escape($coursecode) . '%';
+            $like_sem  = '%' . $DB->sql_like_escape($semestercode) . '%';
+
+            $params = array_merge($exclude_params, $enrol_params, [
+                'code_like' => $like_code,
+                'sem_like'  => $like_sem,
+            ]);
+
+            $sql = "SELECT c.id, c.fullname, c.shortname
+                      FROM {course} c
+                      $enrol_join
+                     WHERE c.id > 1
+                       AND " . $DB->sql_like('c.shortname', ':code_like', false) . "
+                       AND " . $DB->sql_like('c.shortname', ':sem_like',  false) .
+                       $exclude_sql . "
+                     ORDER BY c.id ASC";
+
+            $candidates = $DB->get_records_sql($sql, $params, 0, 20);
+
+            $non_tp = [];
+            $tp_type = [];
+
+            foreach ($candidates as $c) {
+                $cp    = tp_parse_course_shortname($c->shortname);
+                $ccode = $cp['coursecode'];
+                $csem  = $cp['semestercode'];
+
+                if (strcasecmp($ccode, $coursecode) !== 0 ||
+                    (!empty($semestercode) && !empty($csem) && strcasecmp($csem, $semestercode) !== 0)) {
+                    continue;
+                }
+
+                $ctype = strtolower($cp['type']);
+                $is_tp = ($ctype !== '' && (strpos($ctype, 'tp') !== false
+                       || strpos($ctype, 'workshop') !== false
+                       || strpos($ctype, 'teaching') !== false));
+
+                if ($is_tp) {
+                    $tp_type[] = $c;
+                } else {
+                    $non_tp[] = $c;
+                }
+            }
+
+            $result = !empty($non_tp) ? reset($non_tp) : (!empty($tp_type) ? reset($tp_type) : null);
+            if ($result) {
+                $cache[$cache_key] = $result;
+                return $result;
+            }
+        }
+
+        // Fallback: coursecode-only match (no semester available or primary failed).
+        $like_code2 = '%|' . $DB->sql_like_escape($coursecode) . '|%';
+        $params2    = array_merge($exclude_params, $enrol_params, ['code_like2' => $like_code2]);
+        $sql2 = "SELECT c.id, c.fullname, c.shortname
+                   FROM {course} c
+                   $enrol_join
+                  WHERE c.id > 1
+                    AND " . $DB->sql_like('c.shortname', ':code_like2', false) .
+                    $exclude_sql . "
+                  ORDER BY c.id ASC";
+        $courses2 = $DB->get_records_sql($sql2, $params2, 0, 10);
+        foreach ($courses2 as $c) {
+            $cparts = explode('|', $c->shortname);
+            $ccode  = isset($cparts[1]) ? trim($cparts[1]) : '';
+            if (strcasecmp($ccode, $coursecode) !== 0) {
+                continue;
+            }
+            $ctype = strtolower(trim($cparts[0] ?? ''));
+            if (strpos($ctype, 'tp') === false
+             && strpos($ctype, 'workshop') === false
+             && strpos($ctype, 'teaching') === false) {
+                $cache[$cache_key] = $c;
+                return $c;
+            }
+        }
+        if (!empty($courses2)) {
+            $result = reset($courses2);
+            $cache[$cache_key] = $result;
+            return $result;
+        }
+
         $cache[$cache_key] = null;
         return null;
     }
 
-    // â”€â”€ Legacy search strategy (non-pipe shortnames) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // =========================================================================
+    // LEGACY: non-pipe shortnames
+    // =========================================================================
     if (empty($coursecode)) {
         $cache[$cache_key] = null;
         return null;
     }
 
-    $exclude_sql    = $exclude_course_id ? ' AND id != :excludeid' : '';
+    $exclude_sql = $exclude_course_id ? ' AND id != :excludeid' : '';
 
     $candidates = [];
     if (!empty($semestercode)) {
@@ -1105,10 +1190,6 @@ function tp_find_matching_course($current_course_shortname, $exclude_course_id =
     $cache[$cache_key] = null;
     return null;
 }
-
-// ============================================================================
-// HELPER: Automatically find project submission assignment in Course A
-
 // ============================================================================
 function tp_find_matching_assignment($courseid) {
     global $DB;

@@ -212,24 +212,99 @@ switch ($tp_role) {
         tp_render_teacher_dashboard($id, $instance, $context, 'ht', $OUTPUT, $DB);
         echo $OUTPUT->footer();
         break;
-
     // =========================================================================
-    // UNKNOWN ROLE
+    // UNKNOWN/ADMIN/MANAGER ROLE
     // =========================================================================
     default:
         echo $OUTPUT->header();
-        echo $OUTPUT->notification(
-            get_string('error_invalid_role', 'mod_teachingpractice'),
-            'error'
-        );
+
+        // Check if the user is a manager, administrator, or has course update rights.
+        if (has_capability('moodle/course:manageactivities', $context) || is_siteadmin()) {
+            echo $OUTPUT->heading('Teaching Practice - Administrator / Manager Dashboard', 2);
+            tp_render_teacher_dashboard($id, $instance, $context, 'manager', $OUTPUT, $DB);
+        } else {
+            echo $OUTPUT->notification(
+                get_string('error_invalid_role', 'mod_teachingpractice'),
+                'error'
+            );
+        }
+
         echo $OUTPUT->footer();
         break;
 }
-
 // =============================================================================
 // HELPER: Teacher dashboard — list of students with status + action buttons
 // =============================================================================
 function tp_render_teacher_dashboard($cmid, $instance, $context, $role, $OUTPUT, $DB) {
+
+    // Fetch current course details.
+    $course = $DB->get_record('course', ['id' => $instance->course], '*', MUST_EXIST);
+
+    // Fetch and parse the shortname matching details.
+    $matching_course = tp_find_matching_course($course->shortname, $course->id);
+    $parsed = tp_parse_course_shortname($course->shortname);
+    $coursecode   = !empty($parsed['coursecode']) ? $parsed['coursecode'] : 'N/A';
+    $modecode     = !empty($parsed['modecode']) ? $parsed['modecode'] : 'N/A';
+    $semestercode = !empty($parsed['semestercode']) ? $parsed['semestercode'] : 'N/A';
+
+    $course_fully_linked = false;
+    $mode_mismatch = false;
+    $sem_mismatch = false;
+    $mismatch_details = [];
+
+    if ($matching_course) {
+        $m_parsed = tp_parse_course_shortname($matching_course->shortname);
+        $m_coursecode   = !empty($m_parsed['coursecode']) ? $m_parsed['coursecode'] : '';
+        $m_modecode     = !empty($m_parsed['modecode']) ? $m_parsed['modecode'] : '';
+        $m_semestercode = !empty($m_parsed['semestercode']) ? $m_parsed['semestercode'] : '';
+
+        // Determine if there is a mismatch on Mode or Semester.
+        $mode_mismatch = (strval($modecode) !== 'N/A' && $m_modecode !== '' && strcasecmp($modecode, $m_modecode) !== 0);
+        $sem_mismatch  = (strval($semestercode) !== 'N/A' && $m_semestercode !== '' && strcasecmp($semestercode, $m_semestercode) !== 0);
+
+        if (!$mode_mismatch && !$sem_mismatch) {
+            $course_fully_linked = true;
+        } else {
+            if ($mode_mismatch) {
+                $mismatch_details[] = 'Study Mode (Expected: <strong>' . s($modecode) . '</strong>, Found: <strong>' . s($m_modecode) . '</strong>)';
+            }
+            if ($sem_mismatch) {
+                $mismatch_details[] = 'Semester Code (Expected: <strong>' . s($semestercode) . '</strong>, Found: <strong>' . s($m_semestercode) . '</strong>)';
+            }
+        }
+    }
+
+    // Only render matching info card if there is an issue (not linked or mismatch warning).
+    if (!$course_fully_linked) {
+        echo html_writer::start_div('card mb-4');
+        echo html_writer::start_div('card-header bg-light');
+        echo html_writer::tag('h5', 'Linked Project Submission Course Integration', ['class' => 'mb-0']);
+        echo html_writer::end_div();
+        echo html_writer::start_div('card-body');
+
+        if ($matching_course) {
+            echo html_writer::div(
+                html_writer::tag('strong', '⚠️ Match Warning: Linked course found with matching Course Code, but Study Mode or Semester does not match!') . '<br>' .
+                'Linked Course: ' . html_writer::link(new moodle_url('/course/view.php', ['id' => $matching_course->id]), s($matching_course->fullname) . ' (' . s($matching_course->shortname) . ')', ['target' => '_blank']) . '<br>' .
+                'Mismatched fields:<br>' .
+                html_writer::tag('ul', implode('', array_map(function($detail) {
+                    return html_writer::tag('li', $detail);
+                }, $mismatch_details))) .
+                'Please align the shortnames so Course Code, Study Mode, and Semester match exactly.',
+                'alert alert-warning mt-3 mb-0'
+            );
+        } else {
+            echo html_writer::div(
+                html_writer::tag('strong', '❌ Course not found for linked') . '<br>' .
+                'No project submission course matches this activity automatically. ' .
+                'Please verify that a course exists whose shortname contains the Course Code (' . s($coursecode) . '), Study Mode (' . s($modecode) . '), and Semester (' . s($semestercode) . ') in a matching position.',
+                'alert alert-danger mt-3 mb-0'
+            );
+        }
+
+        echo html_writer::end_div();
+        echo html_writer::end_div();
+    }
 
     $students = tp_get_instance_students($instance, $context);
 
@@ -255,6 +330,20 @@ function tp_render_teacher_dashboard($cmid, $instance, $context, $role, $OUTPUT,
     $tp_course       = $DB->get_record('course', ['id' => $instance->course]);
     $matching_course = $tp_course ? tp_find_matching_course($tp_course->shortname, $tp_course->id) : null;
     $matching_assign = $matching_course ? tp_find_matching_assignment($matching_course->id) : null;
+
+    $course_fully_linked = false;
+    if ($matching_course) {
+        $m_parsed = tp_parse_course_shortname($matching_course->shortname);
+        $m_modecode     = !empty($m_parsed['modecode']) ? $m_parsed['modecode'] : '';
+        $m_semestercode = !empty($m_parsed['semestercode']) ? $m_parsed['semestercode'] : '';
+
+        $mode_mismatch = (strval($modecode) !== 'N/A' && $m_modecode !== '' && strcasecmp($modecode, $m_modecode) !== 0);
+        $sem_mismatch  = (strval($semestercode) !== 'N/A' && $m_semestercode !== '' && strcasecmp($semestercode, $m_semestercode) !== 0);
+
+        if (!$mode_mismatch && !$sem_mismatch) {
+            $course_fully_linked = true;
+        }
+    }
 
     foreach ($students as $student) {
 
@@ -308,6 +397,9 @@ function tp_render_teacher_dashboard($cmid, $instance, $context, $role, $OUTPUT,
             ]);
             $action = html_writer::link($cert_url, 'View Certificate',
                 ['class' => 'btn btn-sm btn-info']);
+
+        } elseif (!$course_fully_linked) {
+            $action = html_writer::span('Course not linked', 'text-danger small');
 
         } elseif ($role === 'ct') {
             if (!$performa || $performa->status === TP_STATUS_PENDING) {
