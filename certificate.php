@@ -120,11 +120,16 @@ $end_date    = date('d F Y', $performa->end_date);
 $issued_date = date('d F Y', $certificate->issued_date);
 
 // Build subjects list (exclude empty values)
-$subjects = array_filter([
-    $performa->subject_1,
-    $performa->subject_2,
-    $performa->subject_3,
-]);
+$decoded = json_decode($performa->subject_1, true);
+if (is_array($decoded)) {
+    $subjects = $decoded;
+} else {
+    $subjects = array_filter([
+        $performa->subject_1,
+        $performa->subject_2,
+        $performa->subject_3,
+    ]);
+}
 
 // Extract course code and school name from fullname if formatted using pipes.
 $extracted = tp_extract_course_code_and_school_name($course, $matching_course);
@@ -505,7 +510,7 @@ echo $OUTPUT->header();
     <!-- Footer -->
     <div class="cert-footer">
         This is a digitally signed certificate.<br>
-        Issued by <strong>Allama Iqbal Open University</strong> — School Management System for Teaching Practice
+        Issued by <strong>Allama Iqbal Open University</strong> - School Management System for Teaching Practice
     </div>
 
 </div>

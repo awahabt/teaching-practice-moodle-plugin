@@ -196,9 +196,14 @@ class performa_form extends moodleform {
                     $formdefaults['ht_end_date'] = $performa->end_date;
                 }
                 $selected_subjects = [];
-                if (!empty($performa->subject_1)) $selected_subjects[] = $performa->subject_1;
-                if (!empty($performa->subject_2)) $selected_subjects[] = $performa->subject_2;
-                if (!empty($performa->subject_3)) $selected_subjects[] = $performa->subject_3;
+                $decoded = json_decode($performa->subject_1, true);
+                if (is_array($decoded)) {
+                    $selected_subjects = $decoded;
+                } else {
+                    if (!empty($performa->subject_1)) $selected_subjects[] = $performa->subject_1;
+                    if (!empty($performa->subject_2)) $selected_subjects[] = $performa->subject_2;
+                    if (!empty($performa->subject_3)) $selected_subjects[] = $performa->subject_3;
+                }
                 $formdefaults['ht_subjects'] = $selected_subjects;
             }
 

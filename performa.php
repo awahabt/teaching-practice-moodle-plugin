@@ -212,9 +212,15 @@ if ($data = $form->get_data()) {
         }
 
         $selected_subjects = isset($data->ht_subjects) && is_array($data->ht_subjects) ? array_values($data->ht_subjects) : [];
-        $performa->subject_1  = isset($selected_subjects[0]) ? $selected_subjects[0] : '';
-        $performa->subject_2  = isset($selected_subjects[1]) ? $selected_subjects[1] : '';
-        $performa->subject_3  = isset($selected_subjects[2]) ? $selected_subjects[2] : '';
+        if (count($selected_subjects) > 3) {
+            $performa->subject_1 = json_encode($selected_subjects);
+            $performa->subject_2 = '';
+            $performa->subject_3 = '';
+        } else {
+            $performa->subject_1  = isset($selected_subjects[0]) ? $selected_subjects[0] : '';
+            $performa->subject_2  = isset($selected_subjects[1]) ? $selected_subjects[1] : '';
+            $performa->subject_3  = isset($selected_subjects[2]) ? $selected_subjects[2] : '';
+        }
 
         $performa->timemodified                  = time();
         $DB->update_record('teachingpractice_performa', $performa);
