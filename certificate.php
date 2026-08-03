@@ -293,6 +293,11 @@ echo $OUTPUT->header();
     max-height: 70px;
     max-width: 200px;
     object-fit: contain;
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    pointer-events: none;
+    -webkit-user-drag: none;
 }
 .tp-certificate .signature-label {
     border-top: 1px solid #ccc;
@@ -498,7 +503,10 @@ echo $OUTPUT->header();
     <div class="cert-signatures">
         <div class="cert-signature-col">
             <div class="signature-space">
-                <img src="<?php echo s($signatureurl); ?>" alt="Digital Signature" class="signature-img">
+                <img src="<?php echo s($signatureurl); ?>" alt="Digital Signature" class="signature-img"
+                     draggable="false"
+                     oncontextmenu="return false;"
+                     ondragstart="return false;">
             </div>
             <div class="signature-label">
                 <strong><?php echo s($signaturename); ?></strong><br>
@@ -514,6 +522,19 @@ echo $OUTPUT->header();
     </div>
 
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var sigImg = document.querySelector('.signature-img');
+    if (sigImg) {
+        sigImg.addEventListener('contextmenu', function(e) { e.preventDefault(); return false; });
+        sigImg.addEventListener('dragstart', function(e) { e.preventDefault(); return false; });
+        sigImg.addEventListener('mousedown', function(e) { if (e.button === 2) e.preventDefault(); });
+        sigImg.addEventListener('touchstart', function(e) { e.preventDefault(); }, { passive: false });
+        sigImg.setAttribute('oncontextmenu', 'return false;');
+    }
+});
+</script>
 
 <?php
 echo $OUTPUT->footer();

@@ -144,6 +144,110 @@ class performa_form extends moodleform {
             ]);
             $mform->setType('ht_subjects', PARAM_TEXT);
 
+            $mform->addElement('html', '
+                <div id="subject-spelling-warning" class="alert alert-warning mt-2 mb-2" style="display:none; padding: 8px 12px; font-size: 0.9rem;"></div>
+                <script>
+                document.addEventListener("DOMContentLoaded", function() {
+                    const dictionary = ["Accounting",  "Agriculture",  "Anatomy",  "Arabic",  "Art",  "Artificial Intelligence",  "Astronomy",  "Biochemistry",  "Biology",  "Botany",  "Business Administration",  "Business Studies",  "Calculus",  "Chemistry",  "Civics",  "Commerce",  "Communication Skills",  "Computer Applications",  "Computer Science",  "Creative Writing",  "Data Science",  "Design",  "Digital Literacy",  "Economics",  "Education",  "Electrical Engineering",  "Electronics",  "English",  "Environmental Science",  "Ethics",  "Finance",  "Fine Arts",  "Food Science",  "French",  "General Knowledge",  "Geography",  "Geology",  "Graphic Design",  "Health Education",  "Hindi",  "History",  "Home Economics",  "Human Resource Management",  "Information Technology",  "International Relations",  "Islamic Studies",  "Journalism",  "Law",  "Library Science",  "Linguistics",  "Literature",  "Management",  "Marketing",  "Mathematics",  "Mechanical Engineering",  "Media Studies",  "Microbiology",  "Music",  "Natural Science",  "Nursing",  "Pak Studies",  "Persian",  "Philosophy",  "Physical Education",  "Physics",  "Political Science",  "Programming",  "Psychology",  "Public Administration",  "Public Speaking",  "Punjabi",  "Research Methodology",  "Robotics",  "Science",  "Sindhi",  "Social Studies",  "Sociology",  "Software Engineering",  "Spanish",  "Statistics",  "Urdu",  "Veterinary Science",  "Web Development",  "World History",  "Zoology"];
+
+                    function levenshtein(a, b) {
+                        var tmp;
+                        if (a.length === 0) { return b.length; }
+                        if (b.length === 0) { return a.length; }
+                        if (a.length > b.length) { tmp = a; a = b; b = tmp; }
+
+                        var row = Array(a.length + 1);
+                        for (var i = 0; i <= a.length; i++) { row[i] = i; }
+
+                        for (var i = 1; i <= b.length; i++) {
+                            var prev = i;
+                            for (var j = 1; j <= a.length; j++) {
+                                var val;
+                                if (b[i - 1].toLowerCase() === a[j - 1].toLowerCase()) {
+                                    val = row[j - 1];
+                                } else {
+                                    val = Math.min(row[j - 1] + 1, prev + 1, row[j] + 1);
+                                }
+                                row[j - 1] = prev;
+                                prev = val;
+                            }
+                            row[a.length] = prev;
+                        }
+                        return row[a.length];
+                    }
+
+                    function checkWord(word) {
+                        if (!word || word.length < 3) return null;
+                        word = word.trim();
+                        var exact = dictionary.find(s => s.toLowerCase() === word.toLowerCase());
+                        if (exact) return null;
+
+                        var bestMatch = null;
+                        var minDistance = 999;
+                        for (var i = 0; i < dictionary.length; i++) {
+                            var dist = levenshtein(word, dictionary[i]);
+                            if (dist < minDistance) {
+                                minDistance = dist;
+                                bestMatch = dictionary[i];
+                            }
+                        }
+                        if (minDistance > 0 && minDistance <= 2) {
+                            return bestMatch;
+                        }
+                        return null;
+                    }
+
+                    var inputField = document.getElementById("id_ht_subjects-input");
+                    if (!inputField) {
+                        var wrapper = document.getElementById("id_ht_subjects");
+                        if (wrapper) {
+                            var container = wrapper.closest(".form-autocomplete-selection") || wrapper.parentNode;
+                            inputField = container.querySelector("input[type=\'text\']");
+                        }
+                    }
+
+                    var warningDiv = document.getElementById("subject-spelling-warning");
+
+                    function updateSpellingWarning() {
+                        var warnings = [];
+                        if (inputField) {
+                            var typedVal = inputField.value.trim();
+                            var suggestion = checkWord(typedVal);
+                            if (suggestion) {
+                                warnings.push("Did you mean \"<strong>" + suggestion + "</strong>\" instead of \"" + typedVal + "\"?");
+                            }
+                        }
+                        var select = document.getElementById("id_ht_subjects");
+                        if (select) {
+                            var selectedOptions = Array.from(select.selectedOptions).map(o => o.value);
+                            selectedOptions.forEach(val => {
+                                var suggestion = checkWord(val);
+                                if (suggestion) {
+                                    warnings.push("Selected subject \"" + val + "\" might be misspelled. Did you mean \"<strong>" + suggestion + "</strong>\"?");
+                                }
+                            });
+                        }
+                        if (warnings.length > 0) {
+                            warningDiv.innerHTML = "⚠️ " + warnings.join("<br>⚠️ ");
+                            warningDiv.style.display = "block";
+                        } else {
+                            warningDiv.innerHTML = "";
+                            warningDiv.style.display = "none";
+                        }
+                    }
+
+                    if (inputField) {
+                        inputField.addEventListener("input", updateSpellingWarning);
+                    }
+                    var selectEl = document.getElementById("id_ht_subjects");
+                    if (selectEl) {
+                        selectEl.addEventListener("change", updateSpellingWarning);
+                    }
+                    setInterval(updateSpellingWarning, 1000);
+                });
+                </script>
+            ');
+
             $mform->addElement('html',
                 '<p class="text-muted mb-3 mt-4">Please rate the trainee teacher on each criterion below.</p>');
 
