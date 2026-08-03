@@ -37,4 +37,36 @@ if ($ADMIN->fulltree) {
         '',
         $role_options
     ));
+
+    // Signature configuration section.
+    $settings->add(new admin_setting_heading(
+        'mod_teachingpractice/signature_heading_wrapper',
+        get_string('signature_heading', 'mod_teachingpractice'),
+        ''
+    ));
+
+    $settings->add(new admin_setting_configtext(
+        'mod_teachingpractice/signature_name',
+        get_string('signature_name', 'mod_teachingpractice'),
+        get_string('signature_name_help', 'mod_teachingpractice'),
+        'Prof. Dr. Ali Ahmed',
+        PARAM_TEXT
+    ));
+
+    $settings->add(new admin_setting_configtext(
+        'mod_teachingpractice/signature_title',
+        get_string('signature_title', 'mod_teachingpractice'),
+        get_string('signature_title_help', 'mod_teachingpractice'),
+        'Chairman / Department Head',
+        PARAM_TEXT
+    ));
+
+    $settings->add(new admin_setting_configstoredfile(
+        'mod_teachingpractice/signature_image',
+        get_string('signature_image', 'mod_teachingpractice'),
+        get_string('signature_image_help', 'mod_teachingpractice'),
+        'signature_image',
+        0,
+        ['maxfiles' => 1, 'accepted_types' => ['.jpg', '.png', '.jpeg']]
+    ));
 }

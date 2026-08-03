@@ -88,3 +88,13 @@ $string['error_end_before_start']   = 'End date cannot be earlier than start dat
 $string['error_days_positive']      = 'Total days must be a positive number.';
 $string['error_course_not_linked']   = 'Evaluation cannot be performed because the project submission course is not linked or has matching errors.';
 
+// Certificate Signature Settings
+$string['signature_heading']         = 'Certificate Signature Settings';
+$string['signature_name']            = 'Department Head Name';
+$string['signature_name_help']       = 'Enter the name of the Department Head to be printed on the certificate.';
+$string['signature_title']           = 'Department Head Role / Department';
+$string['signature_title_help']      = 'Enter the designation or department details of the signing authority.';
+$string['signature_image']           = 'Department Head Signature Image';
+$string['signature_image_help']      = 'Upload the digital signature image. Accepted formats: JPG, JPEG, PNG. If left blank, the default testing signature is used.';
+
+

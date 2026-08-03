@@ -1308,3 +1308,34 @@ function tp_student_passes_course($studentid, $courseid) {
     }
     return $avg >= TP_PASSING_PERCENTAGE;
 }
+
+/**
+ * Serves the files stored in the teaching practice component (e.g. signature images).
+ */
+function mod_teachingpractice_pluginfile($course, $cm, $context, $filearea, $args, $forcedownload, array $options = []) {
+    global $CFG, $DB;
+
+    // Settings files are stored in the system context.
+    if ($context->contextlevel != CONTEXT_SYSTEM) {
+        return false;
+    }
+
+    if ($filearea !== 'signature_image') {
+        return false;
+    }
+
+    require_login();
+
+    $itemid = (int)array_shift($args);
+
+    $fs = get_file_storage();
+    $filename = array_pop($args);
+    $filepath = $args ? '/' . implode('/', $args) . '/' : '/';
+
+    $file = $fs->get_file($context->id, 'mod_teachingpractice', $filearea, $itemid, $filepath, $filename);
+    if (!$file) {
+        return false;
+    }
+
+    send_stored_file($file, 0, 0, $forcedownload, $options);
+}

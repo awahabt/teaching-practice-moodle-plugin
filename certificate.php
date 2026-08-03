@@ -132,6 +132,37 @@ $display_coursecode = !empty($extracted['coursecode']) ? $extracted['coursecode'
 $display_schoolname = !empty($extracted['schoolname']) ? $extracted['schoolname'] : $performa->school_name;
 
 
+$signaturename = get_config('mod_teachingpractice', 'signature_name');
+if (empty($signaturename)) {
+    $signaturename = '';
+}
+
+$signaturetitle = get_config('mod_teachingpractice', 'signature_title');
+if (empty($signaturetitle)) {
+    $signaturetitle = '';
+}
+
+$signatureurl = null;
+$fs = get_file_storage();
+$systemcontext = context_system::instance();
+$files = $fs->get_area_files($systemcontext->id, 'mod_teachingpractice', 'signature_image', 0, 'id DESC', false);
+
+if (!empty($files)) {
+    $file = reset($files);
+    $signatureurl = moodle_url::make_pluginfile_url(
+        $file->get_contextid(),
+        $file->get_component(),
+        $file->get_filearea(),
+        $file->get_itemid(),
+        $file->get_filepath(),
+        $file->get_filename()
+    );
+}
+
+if (empty($signatureurl)) {
+    $signatureurl = $OUTPUT->image_url('signature', 'mod_teachingpractice');
+}
+
 echo $OUTPUT->header();
 ?>
 
@@ -229,6 +260,41 @@ echo $OUTPUT->header();
     font-size: 0.88rem;
     color: #666;
     margin-bottom: 8px;
+}
+
+/* ── Signatures ──────────────────────────────────────────────── */
+.tp-certificate .cert-signatures {
+    display: flex;
+    justify-content: end;
+    margin-top: 20px;
+    margin-bottom: 10px;
+    text-align: center;
+}
+.tp-certificate .cert-signature-col {
+    width: 220px;
+}
+.tp-certificate .signature-space {
+    height: 75px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+}
+.tp-certificate .signature-line {
+    border-bottom: 1px dashed #ccc;
+    width: 100%;
+    margin-bottom: 10px;
+}
+.tp-certificate .signature-img {
+    max-height: 70px;
+    max-width: 200px;
+    object-fit: contain;
+}
+.tp-certificate .signature-label {
+    border-top: 1px solid #ccc;
+    margin-top: 5px;
+    padding-top: 5px;
+    font-size: 0.9rem;
+    color: #333;
 }
 
 /* ── Footer ──────────────────────────────────────────────────── */
@@ -423,10 +489,23 @@ echo $OUTPUT->header();
         <?php echo s(tp_recommendation_label($performa->ht_overall_recommendation)); ?>
     </div>
 
+    <!-- Signatures -->
+    <div class="cert-signatures">
+        <div class="cert-signature-col">
+            <div class="signature-space">
+                <img src="<?php echo s($signatureurl); ?>" alt="Digital Signature" class="signature-img">
+            </div>
+            <div class="signature-label">
+                <strong><?php echo s($signaturename); ?></strong><br>
+                <?php echo s($signaturetitle); ?>
+            </div>
+        </div>
+    </div>
+
     <!-- Footer -->
     <div class="cert-footer">
-        This is a system-generated certificate and does not require a physical signature.<br>
-        Issued by <strong>Allama Iqbal Open University</strong> — Teaching Practice Management System
+        This is a digitally signed certificate.<br>
+        Issued by <strong>Allama Iqbal Open University</strong> — School Management System for Teaching Practice
     </div>
 
 </div>
