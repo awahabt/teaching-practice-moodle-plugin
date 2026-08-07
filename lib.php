@@ -1541,10 +1541,18 @@ function tp_is_assignment_submitted_and_graded($studentid, $assignmentid) {
     }
 
     // Check gradebook/assign_grades for a valid non-negative grade.
-    $grade = $DB->get_record('assign_grades', [
-        'assignment' => $assignmentid,
-        'userid'     => $studentid,
-    ]);
+    $sql = "SELECT ag.grade
+              FROM {assign_grades} ag
+             WHERE ag.assignment = :assignid
+               AND ag.userid     = :userid
+               AND ag.grade      IS NOT NULL
+               AND ag.grade      >= 0
+          ORDER BY ag.attemptnumber DESC, ag.id DESC";
+
+    $grade = $DB->get_record_sql($sql, [
+        'assignid' => $assignmentid,
+        'userid'   => $studentid,
+    ], IGNORE_MULTIPLE);
 
     if (!$grade || $grade->grade === null || $grade->grade < 0) {
         return false;
@@ -1552,24 +1560,31 @@ function tp_is_assignment_submitted_and_graded($studentid, $assignmentid) {
 
     return true;
 }
+
 // ============================================================================
-// HELPER: Compute student's average grade percentage across ALL assignments
+// HELPER: Compute student's overall grade percentage across ALL assignments
 //         in a given course.
 //
-// Returns: float (0-100) average percentage if at least one assignment is
-//          graded, or null if no graded assignments exist yet.
+// Calculation: (sum of marks obtained) / (sum of max marks) * 100
+// This treats all assignments by their raw marks rather than averaging
+// individual percentages, which avoids bias when assignments have different
+// max marks.
+//
+// Only assignments that have been graded (grade >= 0) are included.
+// Returns null if no assignments have been graded yet.
 // ============================================================================
 function tp_get_student_average_grade_percentage($studentid, $courseid) {
     global $DB;
 
-    // Fetch every assignment in this course.
+    // Fetch every gradeable assignment in this course.
     $assigns = $DB->get_records('assign', ['course' => $courseid], 'id ASC');
     if (empty($assigns)) {
         return null;
     }
 
-    $total_pct    = 0.0;
-    $graded_count = 0;
+    $total_obtained = 0.0;   // Sum of marks obtained across all graded assignments.
+    $total_maxmarks = 0.0;   // Sum of max marks across those same assignments.
+    $graded_count   = 0;
 
     foreach ($assigns as $assign) {
         // Skip assignments with no max grade defined.
@@ -1577,28 +1592,38 @@ function tp_get_student_average_grade_percentage($studentid, $courseid) {
             continue;
         }
 
-        // Get the student's grade record for this assignment.
-        $grade_rec = $DB->get_record('assign_grades', [
-            'assignment' => $assign->id,
-            'userid'     => $studentid,
-        ]);
+        // Get the student's LATEST graded attempt for this assignment.
+        // There can be multiple rows in assign_grades (one per attempt).
+        // We want the one with the highest attemptnumber that has a real grade.
+        $sql = "SELECT ag.grade
+                  FROM {assign_grades} ag
+                 WHERE ag.assignment = :assignid
+                   AND ag.userid     = :userid
+                   AND ag.grade      IS NOT NULL
+                   AND ag.grade      >= 0
+              ORDER BY ag.attemptnumber DESC, ag.id DESC";
 
-        // Skip if not yet graded (null or negative = ungraded / no submission).
+        $grade_rec = $DB->get_record_sql($sql, [
+            'assignid' => $assign->id,
+            'userid'   => $studentid,
+        ], IGNORE_MULTIPLE);
+
+        // Skip if no valid grade found.
         if (!$grade_rec || $grade_rec->grade === null || $grade_rec->grade < 0) {
             continue;
         }
 
-        // Compute percentage of max mark for this assignment.
-        $pct           = ($grade_rec->grade / $assign->grade) * 100.0;
-        $total_pct    += $pct;
+        $total_obtained += (float) $grade_rec->grade;
+        $total_maxmarks += (float) $assign->grade;
         $graded_count++;
     }
 
-    if ($graded_count === 0) {
+    if ($graded_count === 0 || $total_maxmarks <= 0) {
         return null; // No graded assignments yet - cannot make a decision.
     }
 
-    return round($total_pct / $graded_count, 2);
+    // Return overall percentage: total marks obtained / total max marks * 100.
+    return round(($total_obtained / $total_maxmarks) * 100.0, 2);
 }
 
 // ============================================================================

@@ -384,7 +384,7 @@ function tp_render_teacher_dashboard($cmid, $instance, $context, $role, $OUTPUT,
     $table             = new html_table();
     $table->head       = [
         '#', 'Student Name', 'Reg. No.',
-        'Project Submitted', 'CT Evaluation', 'HT Evaluation', 'Action'
+        'Project Submitted', 'Grade %', 'CT Evaluation', 'HT Evaluation', 'Action'
     ];
     $table->attributes = ['class' => 'table table-bordered table-hover generaltable'];
 
@@ -443,6 +443,25 @@ function tp_render_teacher_dashboard($cmid, $instance, $context, $role, $OUTPUT,
             $project_badge = html_writer::span('⏳ Submitted, Not Graded', 'badge badge-warning');
         } else {
             $project_badge = html_writer::span('❌ Not Submitted', 'badge badge-danger');
+        }
+
+        // ── Per-student grade percentage badge ───────────────────────────────
+        $s_avg_pct   = $s_workshop ? tp_get_student_average_grade_percentage($student->id, $s_workshop->id) : null;
+        $s_passes    = ($s_avg_pct !== null) && ($s_avg_pct >= tp_get_passing_percentage());
+        $passing_pct = tp_get_passing_percentage();
+
+        if ($s_avg_pct === null) {
+            $grade_badge = html_writer::span('—', 'text-muted small');
+        } elseif ($s_passes) {
+            $grade_badge = html_writer::span(
+                '✅ ' . number_format($s_avg_pct, 1) . '%',
+                'badge badge-success'
+            ) . html_writer::tag('small', ' (Pass ≥ ' . $passing_pct . '%)', ['class' => 'text-muted ml-1']);
+        } else {
+            $grade_badge = html_writer::span(
+                '❌ ' . number_format($s_avg_pct, 1) . '%',
+                'badge badge-danger'
+            ) . html_writer::tag('small', ' (Pass ≥ ' . $passing_pct . '%)', ['class' => 'text-muted ml-1']);
         }
 
         $performa  = tp_get_performa($instance->id, $student->id);
@@ -511,6 +530,7 @@ function tp_render_teacher_dashboard($cmid, $instance, $context, $role, $OUTPUT,
             fullname($student),
             $student->email ?: '—',
             $project_badge,
+            $grade_badge,
             $ct_badge,
             $ht_badge,
             $action,
