@@ -159,7 +159,7 @@ switch ($tp_role) {
                 html_writer::tag('h4', '❌ Did Not Meet Passing Criteria') .
                 html_writer::tag('p',
                     'Your average mark across all assignments is <strong>' . number_format($student_avg_pct, 1) . '%</strong>. ' .
-                    'The minimum passing mark is <strong>' . TP_PASSING_PERCENTAGE . '%</strong>. ' .
+                    'The minimum passing mark is <strong>' . tp_get_passing_percentage() . '%</strong>. ' .
                     'Please contact your instructor for further guidance.'
                 ),
                 'alert alert-danger mb-3'
@@ -170,7 +170,7 @@ switch ($tp_role) {
                 html_writer::tag('h4', '✅ Project Passed') .
                 html_writer::tag('p',
                     'Your average mark is <strong>' . number_format($student_avg_pct, 1) . '%</strong> ' .
-                    '(passing mark: ' . TP_PASSING_PERCENTAGE . '%). Your certificate will be available once both evaluations are complete.'
+                    '(passing mark: ' . tp_get_passing_percentage() . '%). Your certificate will be available once both evaluations are complete.'
                 ),
                 'alert alert-success mb-3'
             );
