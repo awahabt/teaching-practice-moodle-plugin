@@ -5,7 +5,7 @@
  * Required by Moodle for every activity module.
  * Lists all Research Project activity instances within a course.
  *
- * URL: /mod/teachingpractice/index.php?id=COURSE_ID
+ * URL: /mod/researchproject/index.php?id=COURSE_ID
  */
 
 require_once('../../config.php');
@@ -15,7 +15,7 @@ $courseid = required_param('id', PARAM_INT);
 $course = $DB->get_record('course', ['id' => $courseid], '*', MUST_EXIST);
 require_login($course);
 
-$PAGE->set_url(new moodle_url('/mod/teachingpractice/index.php', ['id' => $courseid]));
+$PAGE->set_url(new moodle_url('/mod/researchproject/index.php', ['id' => $courseid]));
 $PAGE->set_context(context_course::instance($courseid));
 $PAGE->set_course($course);
 $PAGE->set_title($course->fullname . ' — Research Project Activities');
@@ -25,7 +25,7 @@ echo $OUTPUT->header();
 echo $OUTPUT->heading('Research Project Activities', 2);
 
 // Fetch all instances in this course
-$instances = $DB->get_records('teachingpractice', ['course' => $courseid], 'name ASC');
+$instances = $DB->get_records('researchproject', ['course' => $courseid], 'name ASC');
 
 if (empty($instances)) {
     echo $OUTPUT->notification('No Research Project activities found in this course.', 'info');
@@ -39,7 +39,7 @@ $table->attributes = ['class' => 'table table-bordered generaltable'];
 
 foreach ($instances as $inst) {
     // Get the course module ID for this instance
-    $cm = get_coursemodule_from_instance('teachingpractice', $inst->id, $courseid);
+    $cm = get_coursemodule_from_instance('researchproject', $inst->id, $courseid);
 
     // Get linked course name
     $linked = $DB->get_record('course', ['id' => $inst->linked_course], 'id, fullname, shortname');
@@ -47,7 +47,7 @@ foreach ($instances as $inst) {
         ? $linked->fullname . ' (' . $linked->shortname . ')'
         : 'Not configured';
 
-    $view_url = new moodle_url('/mod/teachingpractice/view.php', ['id' => $cm->id]);
+    $view_url = new moodle_url('/mod/researchproject/view.php', ['id' => $cm->id]);
 
     $table->data[] = [
         html_writer::link($view_url, $inst->name),

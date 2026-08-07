@@ -11,22 +11,22 @@
  */
 
 require_once('../../config.php');
-require_once($CFG->dirroot . '/mod/teachingpractice/lib.php');
+require_once($CFG->dirroot . '/mod/researchproject/lib.php');
 
 $cmid      = required_param('id',        PARAM_INT);
 $studentid = required_param('studentid', PARAM_INT);
 
-list($course, $cm) = get_course_and_cm_from_cmid($cmid, 'teachingpractice');
-$instance = $DB->get_record('teachingpractice', ['id' => $cm->instance], '*', MUST_EXIST);
+list($course, $cm) = get_course_and_cm_from_cmid($cmid, 'researchproject');
+$instance = $DB->get_record('researchproject', ['id' => $cm->instance], '*', MUST_EXIST);
 
 require_login($course, true, $cm);
 $context = context_module::instance($cm->id);
-require_capability('mod/teachingpractice:viewcertificate', $context);
+require_capability('mod/researchproject:viewcertificate', $context);
 
 $student  = $DB->get_record('user', ['id' => $studentid], '*', MUST_EXIST);
 $performa = tp_get_performa($instance->id, $studentid);
 
-$PAGE->set_url(new moodle_url('/mod/teachingpractice/certificate.php', [
+$PAGE->set_url(new moodle_url('/mod/researchproject/certificate.php', [
     'id'        => $cmid,
     'studentid' => $studentid,
 ]));
@@ -43,7 +43,7 @@ $viewer_role = tp_get_user_role($instance, $context);
 
 // Prevent student from viewing other students' certificates.
 if ($viewer_role === 'student' && $USER->id != $student->id) {
-    throw new moodle_exception('nopermissiontoviewfortrainee', 'mod_teachingpractice');
+    throw new moodle_exception('nopermissiontoviewfortrainee', 'mod_researchproject');
 }
 
 // Find the WORKSHOP course this specific student is enrolled in.
@@ -63,10 +63,10 @@ $student_avg_pct = $matching_course
 if (!$performa || $performa->status !== TP_STATUS_COMPLETED) {
     echo $OUTPUT->header();
     echo $OUTPUT->notification(
-        get_string('error_not_complete', 'mod_teachingpractice'), 'warning'
+        get_string('error_not_complete', 'mod_researchproject'), 'warning'
     );
     echo html_writer::link(
-        new moodle_url('/mod/teachingpractice/view.php', ['id' => $cmid]),
+        new moodle_url('/mod/researchproject/view.php', ['id' => $cmid]),
         '← Back',
         ['class' => 'btn btn-secondary mt-2']
     );
@@ -91,14 +91,14 @@ if ($viewer_role === 'student' && !$student_passes) {
             html_writer::tag('h4', '❌ Certificate Not Available — Passing Mark Not Met') .
             html_writer::tag('p',
                 'Your average mark across all assignments is <strong>' . number_format($student_avg_pct, 1) . '%</strong>. ' .
-                'The minimum passing mark required for a certificate is <strong>' . TP_PASSING_PERCENTAGE . '%</strong>. ' .
+                'The minimum passing mark required for a certificate is <strong>' . tp_get_passing_percentage() . '%</strong>. ' .
                 'Please contact your instructor for further guidance.'
             ),
             'alert alert-danger mb-3'
         );
     }
     echo html_writer::link(
-        new moodle_url('/mod/teachingpractice/view.php', ['id' => $cmid]),
+        new moodle_url('/mod/researchproject/view.php', ['id' => $cmid]),
         '← Back',
         ['class' => 'btn btn-secondary mt-2']
     );
@@ -107,12 +107,12 @@ if ($viewer_role === 'student' && !$student_passes) {
 }
 
 
-$certificate = $DB->get_record('teachingpractice_certificate', ['performaid' => $performa->id]);
+$certificate = $DB->get_record('researchproject_certificate', ['performaid' => $performa->id]);
 
 if (!$certificate) {
     echo $OUTPUT->header();
     echo $OUTPUT->notification(
-        get_string('error_no_certificate', 'mod_teachingpractice'), 'error'
+        get_string('error_no_certificate', 'mod_researchproject'), 'error'
     );
     echo $OUTPUT->footer();
     exit;
@@ -141,12 +141,12 @@ $display_coursecode = !empty($extracted['coursecode']) ? $extracted['coursecode'
 $display_schoolname = !empty($extracted['schoolname']) ? $extracted['schoolname'] : $performa->school_name;
 
 
-$signaturename = get_config('mod_teachingpractice', 'signature_name');
+$signaturename = get_config('mod_researchproject', 'signature_name');
 if (empty($signaturename)) {
     $signaturename = '';
 }
 
-$signaturetitle = get_config('mod_teachingpractice', 'signature_title');
+$signaturetitle = get_config('mod_researchproject', 'signature_title');
 if (empty($signaturetitle)) {
     $signaturetitle = '';
 }
@@ -154,7 +154,7 @@ if (empty($signaturetitle)) {
 $signatureurl = null;
 $fs = get_file_storage();
 $systemcontext = context_system::instance();
-$files = $fs->get_area_files($systemcontext->id, 'mod_teachingpractice', 'signature_image', 0, 'id DESC', false);
+$files = $fs->get_area_files($systemcontext->id, 'mod_researchproject', 'signature_image', 0, 'id DESC', false);
 
 if (!empty($files)) {
     $file = reset($files);
@@ -169,7 +169,7 @@ if (!empty($files)) {
 }
 
 if (empty($signatureurl)) {
-    $signatureurl = $OUTPUT->image_url('signature', 'mod_teachingpractice');
+    $signatureurl = $OUTPUT->image_url('signature', 'mod_researchproject');
 }
 
 echo $OUTPUT->header();
@@ -378,7 +378,7 @@ echo $OUTPUT->header();
     <button type="button" onclick="window.print();" class="btn btn-primary mr-2">
         🖨️ Print Certificate
     </button>
-    <a href="<?php echo (new moodle_url('/mod/teachingpractice/view.php', ['id' => $cmid]))->out(); ?>"
+    <a href="<?php echo (new moodle_url('/mod/researchproject/view.php', ['id' => $cmid]))->out(); ?>"
        class="btn btn-secondary">
         ← Back
     </a>

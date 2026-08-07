@@ -21,7 +21,7 @@ define(['core/ajax'], function(Ajax) {
             }
 
             Ajax.call([{
-                methodname: 'mod_teachingpractice_search_courses',
+                methodname: 'mod_researchproject_search_courses',
                 args: { query: query },
                 done: function(results) {
                     // Results are [{value: courseId, label: "Course Name (SHORT)"}]

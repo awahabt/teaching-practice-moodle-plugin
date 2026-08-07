@@ -10,7 +10,7 @@ defined('MOODLE_INTERNAL') || die();
 
 require_once($CFG->dirroot . '/course/moodleform_mod.php');
 
-class mod_teachingpractice_mod_form extends moodleform_mod {
+class mod_researchproject_mod_form extends moodleform_mod {
 
     public function definition() {
         global $DB, $PAGE;
@@ -18,10 +18,10 @@ class mod_teachingpractice_mod_form extends moodleform_mod {
         $mform = $this->_form;
 
         // ── Activity name ─────────────────────────────────────────────────────
-        $mform->addElement('text', 'name', get_string('modulename', 'mod_teachingpractice'), ['size' => 64]);
+        $mform->addElement('text', 'name', get_string('modulename', 'mod_researchproject'), ['size' => 64]);
         $mform->setType('name', PARAM_TEXT);
         $mform->addRule('name', null, 'required', null, 'client');
-        $mform->setDefault('name', 'Teaching Practice');
+        $mform->setDefault('name', 'Research Project');
 
         // ── Description ───────────────────────────────────────────────────────
         $this->standard_intro_elements();

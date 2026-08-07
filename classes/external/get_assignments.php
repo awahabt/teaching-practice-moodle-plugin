@@ -6,7 +6,7 @@
  * Called when teacher selects a course in mod_form.php — the assignment
  * dropdown is then populated dynamically.
  */
-namespace mod_teachingpractice\external;
+namespace mod_researchproject\external;
 
 defined('MOODLE_INTERNAL') || die();
 

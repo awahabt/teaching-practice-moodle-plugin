@@ -7,7 +7,7 @@
  *
  * Called by: amd/src/course_selector.js
  */
-namespace mod_teachingpractice\external;
+namespace mod_researchproject\external;
 
 defined('MOODLE_INTERNAL') || die();
 

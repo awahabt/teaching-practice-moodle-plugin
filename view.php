@@ -11,41 +11,41 @@
  *   HT       → Head Teacher evaluation dashboard + form
  *   Unknown  → Access denied message
  *
- * URL: /mod/teachingpractice/view.php?id=COURSE_MODULE_ID
+ * URL: /mod/researchproject/view.php?id=COURSE_MODULE_ID
  */
 
 require_once('../../config.php');
-require_once($CFG->dirroot . '/mod/teachingpractice/lib.php');
+require_once($CFG->dirroot . '/mod/researchproject/lib.php');
 
 // id = course module ID (cmid) — standard Moodle parameter
 $id = required_param('id', PARAM_INT);
 
 // Load course module, course, and activity instance
-list($course, $cm) = get_course_and_cm_from_cmid($id, 'teachingpractice');
-$instance = $DB->get_record('teachingpractice', ['id' => $cm->instance], '*', MUST_EXIST);
+list($course, $cm) = get_course_and_cm_from_cmid($id, 'researchproject');
+$instance = $DB->get_record('researchproject', ['id' => $cm->instance], '*', MUST_EXIST);
 
 require_login($course, true, $cm);
 $context = context_module::instance($cm->id);
-require_capability('mod/teachingpractice:view', $context);
+require_capability('mod/researchproject:view', $context);
 
 // Mark activity as viewed (for Moodle completion tracking)
 $completion = new completion_info($course);
 $completion->set_module_viewed($cm);
 
-$student_role = get_config('mod_teachingpractice', 'student_role');
-$ct_role      = get_config('mod_teachingpractice', 'ct_role');
-$ht_role      = get_config('mod_teachingpractice', 'ht_role');
+$student_role = get_config('mod_researchproject', 'student_role');
+$ct_role      = get_config('mod_researchproject', 'ct_role');
+$ht_role      = get_config('mod_researchproject', 'ht_role');
 
 if (empty($student_role) || empty($ct_role) || empty($ht_role)) {
 
-    $PAGE->set_url(new moodle_url('/mod/teachingpractice/view.php', ['id' => $id]));
+    $PAGE->set_url(new moodle_url('/mod/researchproject/view.php', ['id' => $id]));
     $PAGE->set_context($context);
     $PAGE->set_course($course);
     $PAGE->set_title($instance->name);
     $PAGE->set_heading($course->fullname);
     echo $OUTPUT->header();
     echo $OUTPUT->notification(
-        get_string('msg_not_configured', 'mod_teachingpractice'),
+        get_string('msg_not_configured', 'mod_researchproject'),
         'warning'
     );
     echo $OUTPUT->footer();
@@ -55,7 +55,7 @@ if (empty($student_role) || empty($ct_role) || empty($ht_role)) {
 // Detect the TP role of the current user in this course context
 $tp_role = tp_get_user_role($instance, $context);
 
-$PAGE->set_url(new moodle_url('/mod/teachingpractice/view.php', ['id' => $id]));
+$PAGE->set_url(new moodle_url('/mod/researchproject/view.php', ['id' => $id]));
 $PAGE->set_context($context);
 $PAGE->set_course($course);
 $PAGE->set_title($instance->name);
@@ -109,7 +109,7 @@ switch ($tp_role) {
 
         // If certificate is ready AND student passes → redirect to certificate.
         if ($ht_done && $student_passes) {
-            redirect(new moodle_url('/mod/teachingpractice/certificate.php', [
+            redirect(new moodle_url('/mod/researchproject/certificate.php', [
                 'id'        => $id,
                 'studentid' => $USER->id,
             ]));
@@ -139,7 +139,7 @@ switch ($tp_role) {
         if (!$has_any_submission) {
             echo html_writer::div(
                 html_writer::tag('h4', 'Project Not Submitted Yet') .
-                html_writer::tag('p', get_string('msg_project_not_submitted', 'mod_teachingpractice')) .
+                html_writer::tag('p', get_string('msg_project_not_submitted', 'mod_researchproject')) .
                 html_writer::link(
                     new moodle_url('/course/view.php', ['id' => $matching_course->id]),
                     '→ Go to the project submission course: ' . s($matching_course->fullname),
@@ -226,7 +226,7 @@ switch ($tp_role) {
             tp_render_teacher_dashboard($id, $instance, $context, 'manager', $OUTPUT, $DB);
         } else {
             echo $OUTPUT->notification(
-                get_string('error_invalid_role', 'mod_teachingpractice'),
+                get_string('error_invalid_role', 'mod_researchproject'),
                 'error'
             );
         }
@@ -375,7 +375,7 @@ function tp_render_teacher_dashboard($cmid, $instance, $context, $role, $OUTPUT,
 
     if (empty($students)) {
         echo $OUTPUT->notification(
-            get_string('msg_no_students', 'mod_teachingpractice'), 'info'
+            get_string('msg_no_students', 'mod_researchproject'), 'info'
         );
         return;
     }
@@ -462,7 +462,7 @@ function tp_render_teacher_dashboard($cmid, $instance, $context, $role, $OUTPUT,
         $action = '—';
 
         if ($performa && $performa->status === TP_STATUS_COMPLETED) {
-            $cert_url = new moodle_url('/mod/teachingpractice/certificate.php', [
+            $cert_url = new moodle_url('/mod/researchproject/certificate.php', [
                 'id'        => $cmid,
                 'studentid' => $student->id,
             ]);
@@ -479,7 +479,7 @@ function tp_render_teacher_dashboard($cmid, $instance, $context, $role, $OUTPUT,
 
         } elseif ($role === 'ct') {
             if (!$performa || $performa->status === TP_STATUS_PENDING) {
-                $form_url = new moodle_url('/mod/teachingpractice/performa.php', [
+                $form_url = new moodle_url('/mod/researchproject/performa.php', [
                     'id'        => $cmid,
                     'studentid' => $student->id,
                     'role'      => 'ct',
@@ -492,7 +492,7 @@ function tp_render_teacher_dashboard($cmid, $instance, $context, $role, $OUTPUT,
 
         } elseif ($role === 'ht') {
             if ($performa && $performa->status === TP_STATUS_CT_DONE) {
-                $form_url = new moodle_url('/mod/teachingpractice/performa.php', [
+                $form_url = new moodle_url('/mod/researchproject/performa.php', [
                     'id'        => $cmid,
                     'studentid' => $student->id,
                     'role'      => 'ht',

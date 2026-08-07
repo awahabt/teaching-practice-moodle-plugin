@@ -4,7 +4,7 @@ defined('MOODLE_INTERNAL') || die();
 $capabilities = [
 
     // Required by Moodle: ability to add this activity to a course
-    'mod/teachingpractice:addinstance' => [
+    'mod/researchproject:addinstance' => [
         'riskbitmask'  => RISK_XSS,
         'captype'      => 'write',
         'contextlevel' => CONTEXT_COURSE,
@@ -15,7 +15,7 @@ $capabilities = [
     ],
 
     // View the activity (all roles need this)
-    'mod/teachingpractice:view' => [
+    'mod/researchproject:view' => [
         'captype'      => 'read',
         'contextlevel' => CONTEXT_MODULE,
         'archetypes'   => [
@@ -27,7 +27,7 @@ $capabilities = [
     ],
 
     // Submit CT evaluation form
-    'mod/teachingpractice:fillct' => [
+    'mod/researchproject:fillct' => [
         'captype'      => 'write',
         'contextlevel' => CONTEXT_MODULE,
         'archetypes'   => [
@@ -37,7 +37,7 @@ $capabilities = [
     ],
 
     // Submit HT evaluation form
-    'mod/teachingpractice:fillht' => [
+    'mod/researchproject:fillht' => [
         'captype'      => 'write',
         'contextlevel' => CONTEXT_MODULE,
         'archetypes'   => [
@@ -47,7 +47,7 @@ $capabilities = [
     ],
 
     // View certificate
-    'mod/teachingpractice:viewcertificate' => [
+    'mod/researchproject:viewcertificate' => [
         'captype'      => 'read',
         'contextlevel' => CONTEXT_MODULE,
         'archetypes'   => [

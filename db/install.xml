@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<XMLDB PATH="mod/teachingpractice/db" VERSION="20241201"
-       COMMENT="Tables for Teaching Practice activity module">
+<XMLDB PATH="mod/researchproject/db" VERSION="20241201"
+       COMMENT="Tables for Research Project activity module">
   <TABLES>
 
     <!--
-      TABLE 1: teachingpractice
+      TABLE 1: researchproject
       One row per activity instance added to a course.
       Stores the activity settings: linked course, roles, name.
     -->
-    <TABLE NAME="teachingpractice" COMMENT="Each activity instance settings">
+    <TABLE NAME="researchproject" COMMENT="Each activity instance settings">
       <FIELDS>
         <FIELD NAME="id"               TYPE="int"  LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
         <FIELD NAME="course"           TYPE="int"  LENGTH="10" NOTNULL="true" COMMENT="Course B — where this activity lives"/>
@@ -30,13 +30,13 @@
     </TABLE>
 
     <!--
-      TABLE 2: teachingpractice_performa
+      TABLE 2: researchproject_performa
       Stores CT and HT evaluation data per student per activity instance.
     -->
-    <TABLE NAME="teachingpractice_performa" COMMENT="Evaluation performa per student per instance">
+    <TABLE NAME="researchproject_performa" COMMENT="Evaluation performa per student per instance">
       <FIELDS>
         <FIELD NAME="id"                        TYPE="int"  LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
-        <FIELD NAME="instanceid"                TYPE="int"  LENGTH="10" NOTNULL="true" COMMENT="FK to teachingpractice.id"/>
+        <FIELD NAME="instanceid"                TYPE="int"  LENGTH="10" NOTNULL="true" COMMENT="FK to researchproject.id"/>
         <FIELD NAME="studentid"                 TYPE="int"  LENGTH="10" NOTNULL="true"/>
         <!-- Basic teaching practice info -->
         <FIELD NAME="registration_no"           TYPE="char" LENGTH="50"  NOTNULL="true"/>
@@ -77,7 +77,7 @@
       </FIELDS>
       <KEYS>
         <KEY NAME="primary"     TYPE="primary" FIELDS="id"/>
-        <KEY NAME="instanceid"  TYPE="foreign" FIELDS="instanceid" REFTABLE="teachingpractice" REFFIELDS="id"/>
+        <KEY NAME="instanceid"  TYPE="foreign" FIELDS="instanceid" REFTABLE="researchproject" REFFIELDS="id"/>
         <KEY NAME="studentid"   TYPE="foreign" FIELDS="studentid"  REFTABLE="user"             REFFIELDS="id"/>
       </KEYS>
       <INDEXES>
@@ -87,10 +87,10 @@
     </TABLE>
 
     <!--
-      TABLE 3: teachingpractice_certificate
+      TABLE 3: researchproject_certificate
       One row per issued certificate.
     -->
-    <TABLE NAME="teachingpractice_certificate" COMMENT="Issued certificates">
+    <TABLE NAME="researchproject_certificate" COMMENT="Issued certificates">
       <FIELDS>
         <FIELD NAME="id"             TYPE="int"  LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
         <FIELD NAME="performaid"     TYPE="int"  LENGTH="10" NOTNULL="true"/>
@@ -102,7 +102,7 @@
       </FIELDS>
       <KEYS>
         <KEY NAME="primary"    TYPE="primary" FIELDS="id"/>
-        <KEY NAME="performaid" TYPE="foreign" FIELDS="performaid" REFTABLE="teachingpractice_performa" REFFIELDS="id"/>
+        <KEY NAME="performaid" TYPE="foreign" FIELDS="performaid" REFTABLE="researchproject_performa" REFFIELDS="id"/>
       </KEYS>
       <INDEXES>
         <INDEX NAME="certificate_no" UNIQUE="true"  FIELDS="certificate_no"/>

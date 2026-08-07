@@ -11,8 +11,8 @@
  */
 
 require_once('../../config.php');
-require_once($CFG->dirroot . '/mod/teachingpractice/lib.php');
-require_once($CFG->dirroot . '/mod/teachingpractice/classes/form/performa_form.php');
+require_once($CFG->dirroot . '/mod/researchproject/lib.php');
+require_once($CFG->dirroot . '/mod/researchproject/classes/form/performa_form.php');
 
 $cmid = optional_param('cmid', 0, PARAM_INT);
 if (!$cmid) {
@@ -25,17 +25,17 @@ if (!in_array($role, ['ct', 'ht'])) {
     throw new moodle_exception('invalidparameter', 'error');
 }
 
-list($course, $cm) = get_course_and_cm_from_cmid($cmid, 'teachingpractice');
-$instance = $DB->get_record('teachingpractice', ['id' => $cm->instance], '*', MUST_EXIST);
+list($course, $cm) = get_course_and_cm_from_cmid($cmid, 'researchproject');
+$instance = $DB->get_record('researchproject', ['id' => $cm->instance], '*', MUST_EXIST);
 
 require_login($course, true, $cm);
 $context = context_module::instance($cm->id);
 
 // Check correct capability for the role
 if ($role === 'ct') {
-    require_capability('mod/teachingpractice:fillct', $context);
+    require_capability('mod/researchproject:fillct', $context);
 } else {
-    require_capability('mod/teachingpractice:fillht', $context);
+    require_capability('mod/researchproject:fillht', $context);
 }
 
 // Ensure the WORKSHOP course for this specific student is fully linked.
@@ -64,7 +64,7 @@ if ($matching_course) {
 }
 
 if (!$course_fully_linked) {
-    throw new moodle_exception('error_course_not_linked', 'mod_teachingpractice', '', null,
+    throw new moodle_exception('error_course_not_linked', 'mod_researchproject', '', null,
         'Evaluation cannot be performed: no matching WORKSHOP course found for this student (checked shortname + idnumber, mode, and semester).');
 }
 
@@ -74,7 +74,7 @@ $student  = $DB->get_record('user', ['id' => $studentid], '*', MUST_EXIST);
 // Auto-sync Section A from Moodle (profile + linked assignment submission).
 $performa = tp_sync_student_performa($instance, $studentid);
 
-$PAGE->set_url(new moodle_url('/mod/teachingpractice/performa.php', [
+$PAGE->set_url(new moodle_url('/mod/researchproject/performa.php', [
     'id'        => $cmid,
     'studentid' => $studentid,
     'role'      => $role,
@@ -92,11 +92,11 @@ if ($role === 'ht') {
         \core\notification::error(
             'Head Teacher evaluation cannot be submitted until the Cooperating Teacher has completed their evaluation first.'
         );
-        redirect(new moodle_url('/mod/teachingpractice/view.php', ['id' => $cmid]));
+        redirect(new moodle_url('/mod/researchproject/view.php', ['id' => $cmid]));
     }
     if ($performa->status === TP_STATUS_COMPLETED) {
         \core\notification::info('Evaluation already completed. The certificate has been issued.');
-        redirect(new moodle_url('/mod/teachingpractice/certificate.php', [
+        redirect(new moodle_url('/mod/researchproject/certificate.php', [
             'id'        => $cmid,
             'studentid' => $studentid,
         ]));
@@ -106,7 +106,7 @@ if ($role === 'ht') {
 // Guard: CT cannot resubmit
 if ($role === 'ct' && $performa && $performa->status !== TP_STATUS_PENDING) {
     \core\notification::info('You have already submitted the Cooperating Teacher evaluation for this student.');
-    redirect(new moodle_url('/mod/teachingpractice/view.php', ['id' => $cmid]));
+    redirect(new moodle_url('/mod/researchproject/view.php', ['id' => $cmid]));
 }
 
 // Removed student project submission guard for CT evaluation
@@ -114,7 +114,7 @@ if ($role === 'ct' && $performa && $performa->status !== TP_STATUS_PENDING) {
 $sectiondata = tp_build_section_a_data($student, $performa, $instance);
 $certno = null;
 if ($performa && $performa->status === TP_STATUS_COMPLETED) {
-    $certrecord = $DB->get_record('teachingpractice_certificate', ['performaid' => $performa->id]);
+    $certrecord = $DB->get_record('researchproject_certificate', ['performaid' => $performa->id]);
     if ($certrecord) {
         $certno = $certrecord->certificate_no;
     }
@@ -132,7 +132,7 @@ $form = new performa_form(null, [
 ]);
 
 if ($form->is_cancelled()) {
-    redirect(new moodle_url('/mod/teachingpractice/view.php', ['id' => $cmid]));
+    redirect(new moodle_url('/mod/researchproject/view.php', ['id' => $cmid]));
 }
 
 if ($data = $form->get_data()) {
@@ -140,7 +140,7 @@ if ($data = $form->get_data()) {
     if ($role === 'ct') {
 
         if (!$performa) {
-            throw new moodle_exception('error_no_performa', 'mod_teachingpractice');
+            throw new moodle_exception('error_no_performa', 'mod_researchproject');
         }
 
         // Validate all rating fields against the allowed whitelist.
@@ -168,12 +168,12 @@ if ($data = $form->get_data()) {
         $performa->ct_submitted_date         = time();
         $performa->status                    = TP_STATUS_CT_DONE;
         $performa->timemodified              = time();
-        $DB->update_record('teachingpractice_performa', $performa);
+        $DB->update_record('researchproject_performa', $performa);
 
         \core\notification::success(
-            get_string('msg_performa_saved', 'mod_teachingpractice')
+            get_string('msg_performa_saved', 'mod_researchproject')
         );
-        redirect(new moodle_url('/mod/teachingpractice/view.php', ['id' => $cmid]));
+        redirect(new moodle_url('/mod/researchproject/view.php', ['id' => $cmid]));
 
     } elseif ($role === 'ht') {
 
@@ -226,21 +226,21 @@ if ($data = $form->get_data()) {
         }
 
         $performa->timemodified                  = time();
-        $DB->update_record('teachingpractice_performa', $performa);
+        $DB->update_record('researchproject_performa', $performa);
 
         // Issue certificate — also marks course complete for student
         $cert_no = tp_issue_certificate($performa, $instance->course);
 
         if ($cert_no) {
             \core\notification::success(
-                get_string('msg_certificate_issued', 'mod_teachingpractice') .
+                get_string('msg_certificate_issued', 'mod_researchproject') .
                 ' Certificate No: ' . $cert_no
             );
         } else {
             \core\notification::info('Evaluation submitted. Certificate was already issued previously.');
         }
 
-        redirect(new moodle_url('/mod/teachingpractice/certificate.php', [
+        redirect(new moodle_url('/mod/researchproject/certificate.php', [
             'id'        => $cmid,
             'studentid' => $studentid,
         ]));

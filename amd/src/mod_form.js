@@ -26,7 +26,7 @@ define(['jquery', 'core/ajax', 'core/notification'], function($, Ajax, Notificat
         assignSelect.disabled = true;
 
         Ajax.call([{
-            methodname: 'mod_teachingpractice_get_assignments',
+            methodname: 'mod_researchproject_get_assignments',
             args: {courseid: parseInt(courseId, 10)},
             done: function(assignments) {
                 assignSelect.disabled = false;

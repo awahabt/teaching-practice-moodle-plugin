@@ -15,7 +15,7 @@
 defined('MOODLE_INTERNAL') || die();
 
 require_once($CFG->libdir . '/formslib.php');
-require_once($CFG->dirroot . '/mod/teachingpractice/lib.php');
+require_once($CFG->dirroot . '/mod/researchproject/lib.php');
 
 class performa_form extends moodleform {
 
@@ -314,7 +314,7 @@ class performa_form extends moodleform {
             $this->set_data($formdefaults);
         }
 
-        $this->add_action_buttons(true, get_string('submit_evaluation', 'mod_teachingpractice'));
+        $this->add_action_buttons(true, get_string('submit_evaluation', 'mod_researchproject'));
     }
 
     public function validation($data, $files) {

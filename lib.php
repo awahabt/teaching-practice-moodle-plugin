@@ -24,9 +24,9 @@ define('TP_PASSING_PERCENTAGE', 50);
 
 /**
  * Called when a new activity instance is added to a course.
- * Inserts a row into the teachingpractice table.
+ * Inserts a row into the researchproject table.
  */
-function teachingpractice_add_instance($data, $mform = null) {
+function researchproject_add_instance($data, $mform = null) {
     global $DB;
     $data->linked_course = 0;
     $data->linked_assign = 0;
@@ -35,14 +35,18 @@ function teachingpractice_add_instance($data, $mform = null) {
     $data->ht_role      = 0;
     $data->timecreated  = time();
     $data->timemodified = time();
-    return $DB->insert_record('teachingpractice', $data);
+    return $DB->insert_record('researchproject', $data);
+}
+
+function teachingpractice_add_instance($data, $mform = null) {
+    return researchproject_add_instance($data, $mform);
 }
 
 /**
  * Called when an existing activity instance is edited and saved.
- * Updates the row in the teachingpractice table.
+ * Updates the row in the researchproject table.
  */
-function teachingpractice_update_instance($data, $mform = null) {
+function researchproject_update_instance($data, $mform = null) {
     global $DB;
     $data->linked_course = 0;
     $data->linked_assign = 0;
@@ -51,43 +55,51 @@ function teachingpractice_update_instance($data, $mform = null) {
     $data->ht_role      = 0;
     $data->id           = $data->instance;
     $data->timemodified = time();
-    return $DB->update_record('teachingpractice', $data);
+    return $DB->update_record('researchproject', $data);
+}
+
+function teachingpractice_update_instance($data, $mform = null) {
+    return researchproject_update_instance($data, $mform);
 }
 
 /**
  * Called when an activity instance is deleted from a course.
  * Removes all related data.
  */
-function teachingpractice_delete_instance($id) {
+function researchproject_delete_instance($id) {
     global $DB;
 
-    if (!$instance = $DB->get_record('teachingpractice', ['id' => $id])) {
+    if (!$instance = $DB->get_record('researchproject', ['id' => $id])) {
         return false;
     }
 
     // Delete certificates linked to this instance
     $performa_ids = $DB->get_fieldset_select(
-        'teachingpractice_performa', 'id', 'instanceid = ?', [$id]
+        'researchproject_performa', 'id', 'instanceid = ?', [$id]
     );
     if ($performa_ids) {
         list($sql, $params) = $DB->get_in_or_equal($performa_ids);
-        $DB->delete_records_select('teachingpractice_certificate', "performaid $sql", $params);
+        $DB->delete_records_select('researchproject_certificate', "performaid $sql", $params);
     }
 
     // Delete all performa records for this instance
-    $DB->delete_records('teachingpractice_performa', ['instanceid' => $id]);
+    $DB->delete_records('researchproject_performa', ['instanceid' => $id]);
 
     // Delete the instance itself
-    $DB->delete_records('teachingpractice', ['id' => $id]);
+    $DB->delete_records('researchproject', ['id' => $id]);
 
     return true;
+}
+
+function teachingpractice_delete_instance($id) {
+    return researchproject_delete_instance($id);
 }
 
 /**
  * Returns feature support flags for this module.
  * Tells Moodle which standard features this activity supports.
  */
-function teachingpractice_supports($feature) {
+function researchproject_supports($feature) {
     switch ($feature) {
         case FEATURE_MOD_INTRO:          return true;
         case FEATURE_SHOW_DESCRIPTION:   return true;
@@ -97,16 +109,20 @@ function teachingpractice_supports($feature) {
     }
 }
 
+function teachingpractice_supports($feature) {
+    return researchproject_supports($feature);
+}
+
 // ============================================================================
 // HELPER: Rating radio button options
 // ============================================================================
 function tp_get_rating_options() {
     return [
-        'excellent'        => get_string('rating_excellent',        'mod_teachingpractice'),
-        'verygood'         => get_string('rating_verygood',         'mod_teachingpractice'),
-        'good'             => get_string('rating_good',             'mod_teachingpractice'),
-        'fair'             => get_string('rating_fair',             'mod_teachingpractice'),
-        'needsimprovement' => get_string('rating_needsimprovement', 'mod_teachingpractice'),
+        'excellent'        => get_string('rating_excellent',        'mod_researchproject'),
+        'verygood'         => get_string('rating_verygood',         'mod_researchproject'),
+        'good'             => get_string('rating_good',             'mod_researchproject'),
+        'fair'             => get_string('rating_fair',             'mod_researchproject'),
+        'needsimprovement' => get_string('rating_needsimprovement', 'mod_researchproject'),
     ];
 }
 
@@ -115,9 +131,9 @@ function tp_get_rating_options() {
 // ============================================================================
 function tp_get_recommendation_options() {
     return [
-        'completed'           => get_string('rec_completed',           'mod_teachingpractice'),
-        'completed_minor'     => get_string('rec_completed_minor',     'mod_teachingpractice'),
-        'further_improvement' => get_string('rec_further_improvement', 'mod_teachingpractice'),
+        'completed'           => get_string('rec_completed',           'mod_researchproject'),
+        'completed_minor'     => get_string('rec_completed_minor',     'mod_researchproject'),
+        'further_improvement' => get_string('rec_further_improvement', 'mod_researchproject'),
     ];
 }
 
@@ -152,7 +168,7 @@ function tp_recommendation_label($value) {
 // ============================================================================
 function tp_get_performa($instanceid, $studentid) {
     global $DB;
-    return $DB->get_record('teachingpractice_performa', [
+    return $DB->get_record('researchproject_performa', [
         'instanceid' => $instanceid,
         'studentid'  => $studentid,
     ]);
@@ -443,7 +459,7 @@ function tp_sync_student_performa(stdClass $instance, $studentid) {
             $performa->$field = tp_normalise_section_a_value($field, $fetched->$field ?? '');
         }
         $performa->timemodified = time();
-        $performa->id = $DB->insert_record('teachingpractice_performa', $performa);
+        $performa->id = $DB->insert_record('researchproject_performa', $performa);
         return $performa;
     }
 
@@ -454,7 +470,7 @@ function tp_sync_student_performa(stdClass $instance, $studentid) {
             }
         }
         $performa->timemodified = time();
-        $DB->update_record('teachingpractice_performa', $performa);
+        $DB->update_record('researchproject_performa', $performa);
     }
 
     return $performa;
@@ -509,7 +525,7 @@ function tp_format_certificate_date($timestamp) {
 function tp_render_section_a_certificate($student, $data, array $options = []) {
     global $DB, $COURSE;
 
-    $certno = $options['certno'] ?? get_string('certno_pending', 'mod_teachingpractice');
+    $certno = $options['certno'] ?? get_string('certno_pending', 'mod_researchproject');
     $subjects = array_filter([
         $data->subject_1 ?? '',
         $data->subject_2 ?? '',
@@ -528,7 +544,7 @@ function tp_render_section_a_certificate($student, $data, array $options = []) {
     $matching_course = null;
     $c = null;
     if (!empty($data->instanceid)) {
-        $tp = $DB->get_record('teachingpractice', ['id' => $data->instanceid]);
+        $tp = $DB->get_record('researchproject', ['id' => $data->instanceid]);
         if ($tp) {
             $c = $DB->get_record('course', ['id' => $tp->course]);
             if ($c) {
@@ -556,9 +572,9 @@ function tp_render_section_a_certificate($student, $data, array $options = []) {
     $display_schoolname = !empty($extracted['schoolname']) ? $extracted['schoolname'] : ($data->school_name ?? '');
 
     $html = html_writer::start_div('tp-section-a-cert');
-    $html .= html_writer::tag('div', get_string('certno_label', 'mod_teachingpractice') . ' ' .
+    $html .= html_writer::tag('div', get_string('certno_label', 'mod_researchproject') . ' ' .
         html_writer::tag('strong', s($certno)), ['class' => 'tp-cert-no']);
-    $html .= html_writer::tag('div', get_string('certificate_title', 'mod_teachingpractice'),
+    $html .= html_writer::tag('div', get_string('certificate_title', 'mod_researchproject'),
         ['class' => 'tp-cert-title']);
 
     $html .= html_writer::start_div('tp-cert-body');
@@ -578,7 +594,7 @@ function tp_render_section_a_certificate($student, $data, array $options = []) {
     );
 
     if (!empty($subjects)) {
-        $html .= html_writer::tag('p', get_string('certificate_subjects_intro', 'mod_teachingpractice'));
+        $html .= html_writer::tag('p', get_string('certificate_subjects_intro', 'mod_researchproject'));
         $items = '';
         foreach ($subjects as $subject) {
             $items .= html_writer::tag('li', s($subject));
@@ -665,9 +681,9 @@ function tp_get_user_role($instance, $context) {
     $user_roles    = get_user_roles($context, $USER->id, true);
     $user_role_ids = array_column($user_roles, 'roleid');
 
-    $ht_role = get_config('mod_teachingpractice', 'ht_role');
-    $ct_role = get_config('mod_teachingpractice', 'ct_role');
-    $student_role = get_config('mod_teachingpractice', 'student_role');
+    $ht_role = get_config('mod_researchproject', 'ht_role');
+    $ct_role = get_config('mod_researchproject', 'ct_role');
+    $student_role = get_config('mod_researchproject', 'student_role');
 
     // Priority: HT > CT > Student (in case someone has multiple roles)
     if ($ht_role && in_array((int)$ht_role, $user_role_ids)) {
@@ -694,7 +710,7 @@ function tp_get_instance_students($instance, $context) {
 
     $studentids = [];
     $coursecontext = $context->get_course_context(true);
-    $studentroleid = (int) get_config('mod_teachingpractice', 'student_role');
+    $studentroleid = (int) get_config('mod_researchproject', 'student_role');
 
     if ($studentroleid) {
         $enrolled = get_role_users(
@@ -749,7 +765,7 @@ function tp_get_instance_students($instance, $context) {
 function tp_generate_certificate_number() {
     global $DB;
     $year  = date('Y');
-    $count = $DB->count_records('teachingpractice_certificate');
+    $count = $DB->count_records('researchproject_certificate');
     $seq   = str_pad($count + 1, 5, '0', STR_PAD_LEFT);
     return "AIOU-TP-{$year}-{$seq}";
 }
@@ -759,7 +775,7 @@ function tp_generate_certificate_number() {
 //
 // Steps:
 //   1. Generate certificate number
-//   2. Insert record into teachingpractice_certificate
+//   2. Insert record into researchproject_certificate
 //   3. Update performa status to 'completed'
 //   4. Enrol student in Course B (if not already enrolled)
 //   5. Mark Course B as complete for student
@@ -770,7 +786,7 @@ function tp_issue_certificate($performa, $course_b_id) {
     global $DB;
 
     // Skip if certificate already exists
-    if ($DB->record_exists('teachingpractice_certificate', ['performaid' => $performa->id])) {
+    if ($DB->record_exists('researchproject_certificate', ['performaid' => $performa->id])) {
         return false;
     }
 
@@ -784,11 +800,11 @@ function tp_issue_certificate($performa, $course_b_id) {
     $cert->certificate_no = $cert_no;
     $cert->issued_date  = time();
     $cert->timecreated  = time();
-    $DB->insert_record('teachingpractice_certificate', $cert);
+    $DB->insert_record('researchproject_certificate', $cert);
 
     // Mark performa as completed
-    $DB->set_field('teachingpractice_performa', 'status',       TP_STATUS_COMPLETED, ['id' => $performa->id]);
-    $DB->set_field('teachingpractice_performa', 'timemodified',  time(),              ['id' => $performa->id]);
+    $DB->set_field('researchproject_performa', 'status',       TP_STATUS_COMPLETED, ['id' => $performa->id]);
+    $DB->set_field('researchproject_performa', 'timemodified',  time(),              ['id' => $performa->id]);
 
     // Enrol student in Course B if not already enrolled
     $enrol_plugin    = enrol_get_plugin('manual');
@@ -839,30 +855,51 @@ function tp_extract_course_code_and_school_name($course, $matching_course = null
     $coursecode = '';
     $schoolname = '';
 
-    // Priority: use the matching (project submission) course fullname first,
-    // then fall back to the TP course fullname.
-    if ($matching_course && !empty($matching_course->fullname) && strpos($matching_course->fullname, '|') !== false) {
-        $fullname = $matching_course->fullname;
-    } else if ($course && !empty($course->fullname) && strpos($course->fullname, '|') !== false) {
-        $fullname = $course->fullname;
-    } else {
-        $fullname = '';
+    $candidates = [];
+    if ($course && !empty($course->fullname)) {
+        $candidates[] = $course->fullname;
+    }
+    if ($course && !empty($course->shortname)) {
+        $candidates[] = $course->shortname;
+    }
+    if ($matching_course && !empty($matching_course->fullname)) {
+        $candidates[] = $matching_course->fullname;
+    }
+    if ($matching_course && !empty($matching_course->shortname)) {
+        $candidates[] = $matching_course->shortname;
     }
 
-    if ($fullname !== '') {
-        $parts = array_map('trim', explode('|', $fullname));
-        $n     = count($parts);
+    foreach ($candidates as $str) {
+        if (strpos($str, '|') !== false) {
+            $parts = array_map('trim', explode('|', $str));
+            $n     = count($parts);
 
-        if ($n >= 3) {
-            // New format: TYPE | COURSECODE | SCHOOL NAME | ...
-            $coursecode = $parts[1];  // always 2nd segment
-            $schoolname = $parts[2];  // always 3rd segment
-        } else if ($n === 2) {
-            // Legacy format (no TYPE prefix): COURSECODE | SCHOOL NAME
-            $coursecode = $parts[0];
-            $schoolname = $parts[1];
+            // Format: PREFIX | COURSECODE | SCHOOL NAME | ...
+            // Example: "AIOU|6997|GOVT. HIGH SCHOOL BHABRA, LALAZAR WAH CA|16BH|ODL|2313"
+            //   parts[0] = Prefix (e.g. AIOU, Workshop - ignored)
+            //   parts[1] = Course Code (e.g. 6997)
+            //   parts[2] = School Name (e.g. GOVT. HIGH SCHOOL BHABRA, LALAZAR WAH CA)
+            if ($n >= 3) {
+                if (is_numeric($parts[0])) {
+                    if (empty($coursecode)) $coursecode = $parts[0];
+                    if (empty($schoolname)) $schoolname = $parts[1];
+                } else {
+                    if (empty($coursecode)) $coursecode = $parts[1];
+                    if (empty($schoolname)) $schoolname = $parts[2];
+                }
+            } else if ($n === 2) {
+                if (is_numeric($parts[0])) {
+                    if (empty($coursecode)) $coursecode = $parts[0];
+                    if (empty($schoolname)) $schoolname = $parts[1];
+                } else {
+                    if (empty($coursecode)) $coursecode = $parts[1];
+                }
+            }
+
+            if (!empty($coursecode) && !empty($schoolname)) {
+                break;
+            }
         }
-        // n < 2: no extraction possible — both remain empty strings.
     }
 
     return [
@@ -1565,8 +1602,20 @@ function tp_get_student_average_grade_percentage($studentid, $courseid) {
 }
 
 // ============================================================================
+// HELPER: Fetch configured passing percentage for certificate eligibility
+// Defaults to 50% if not configured in plugin settings.
+// ============================================================================
+function tp_get_passing_percentage() {
+    $val = get_config('mod_researchproject', 'passing_percentage');
+    if ($val === false || $val === null || $val === '') {
+        return 50;
+    }
+    return (float) $val;
+}
+
+// ============================================================================
 // HELPER: Returns true if the student's average grade across all assignments
-//         in a course meets or exceeds TP_PASSING_PERCENTAGE.
+//         in a course meets or exceeds the configured passing percentage.
 //
 // Returns: true  -> passed
 //          false -> failed or not yet graded
@@ -1576,13 +1625,13 @@ function tp_student_passes_course($studentid, $courseid) {
     if ($avg === null) {
         return false; // Not graded yet - treat as not passed.
     }
-    return $avg >= TP_PASSING_PERCENTAGE;
+    return $avg >= tp_get_passing_percentage();
 }
 
 /**
- * Serves the files stored in the teaching practice component (e.g. signature images).
+ * Serves the files stored in the research project component (e.g. signature images).
  */
-function mod_teachingpractice_pluginfile($course, $cm, $context, $filearea, $args, $forcedownload, array $options = []) {
+function mod_researchproject_pluginfile($course, $cm, $context, $filearea, $args, $forcedownload, array $options = []) {
     global $CFG, $DB;
 
     // Settings files are stored in the system context.
@@ -1602,10 +1651,14 @@ function mod_teachingpractice_pluginfile($course, $cm, $context, $filearea, $arg
     $filename = array_pop($args);
     $filepath = $args ? '/' . implode('/', $args) . '/' : '/';
 
-    $file = $fs->get_file($context->id, 'mod_teachingpractice', $filearea, $itemid, $filepath, $filename);
+    $file = $fs->get_file($context->id, 'mod_researchproject', $filearea, $itemid, $filepath, $filename);
     if (!$file) {
         return false;
     }
 
     send_stored_file($file, 0, 0, $forcedownload, $options);
+}
+
+function mod_teachingpractice_pluginfile($course, $cm, $context, $filearea, $args, $forcedownload, array $options = []) {
+    return mod_researchproject_pluginfile($course, $cm, $context, $filearea, $args, $forcedownload, $options);
 }
