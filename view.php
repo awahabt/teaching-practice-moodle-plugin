@@ -68,11 +68,13 @@ switch ($tp_role) {
     // STUDENT VIEW
     // =========================================================================
     case 'student':
-        // ── Automatic matching: find the linked course enrolled by this student ────────
-        // Uses the current course shortname (e.g. WORKSHOP|9028|G1474|16BH|ODL|2513)
-        // to find another course with the same tail (9028|G1474|16BH|ODL|2513)
-        // that this student is enrolled in.
-        $matching_course = tp_find_matching_course($course->shortname, $course->id, $USER->id);
+        // ── Automatic matching: find the WORKSHOP course this student is enrolled in ──
+        // Uses tp_find_student_workshop_course() which:
+        //   • Requires WORKSHOP prefix in shortname TYPE segment.
+        //   • Matches course code + mode + semester (always 2nd-from-last and last).
+        //   • Checks both shortname segments AND course idnumber.
+        //   • Filters to only courses this specific student is actively enrolled in.
+        $matching_course = tp_find_student_workshop_course($course->shortname, $course->id, $USER->id);
         $matching_assign = $matching_course ? tp_find_matching_assignment($matching_course->id) : null;
 
         if (!$matching_course || !$matching_assign) {
@@ -241,6 +243,9 @@ function tp_render_teacher_dashboard($cmid, $instance, $context, $role, $OUTPUT,
     $course = $DB->get_record('course', ['id' => $instance->course], '*', MUST_EXIST);
 
     // Fetch and parse the shortname matching details.
+    // For the course-level status card we still use tp_find_matching_course() so that we can
+    // detect ANY match (and check if it has WORKSHOP prefix). Per-student resolution happens
+    // inside the loop below using tp_find_student_workshop_course().
     $matching_course = tp_find_matching_course($course->shortname, $course->id);
     $parsed = tp_parse_course_shortname($course->shortname);
     $coursecode   = !empty($parsed['coursecode']) ? $parsed['coursecode'] : 'N/A';
@@ -249,20 +254,23 @@ function tp_render_teacher_dashboard($cmid, $instance, $context, $role, $OUTPUT,
 
     $course_fully_linked = false;
     $mode_mismatch = false;
-    $sem_mismatch = false;
+    $sem_mismatch  = false;
     $mismatch_details = [];
+    $matched_has_workshop = false;
 
     if ($matching_course) {
         $m_parsed = tp_parse_course_shortname($matching_course->shortname);
         $m_coursecode   = !empty($m_parsed['coursecode']) ? $m_parsed['coursecode'] : '';
         $m_modecode     = !empty($m_parsed['modecode']) ? $m_parsed['modecode'] : '';
         $m_semestercode = !empty($m_parsed['semestercode']) ? $m_parsed['semestercode'] : '';
+        $matched_has_workshop = (stripos($m_parsed['type'], 'workshop') !== false);
 
         // Determine if there is a mismatch on Mode or Semester.
         $mode_mismatch = (strval($modecode) !== 'N/A' && $m_modecode !== '' && strcasecmp($modecode, $m_modecode) !== 0);
         $sem_mismatch  = (strval($semestercode) !== 'N/A' && $m_semestercode !== '' && strcasecmp($semestercode, $m_semestercode) !== 0);
 
-        if (!$mode_mismatch && !$sem_mismatch) {
+        // Fully linked only when: mode + semester match AND the course has WORKSHOP prefix.
+        if (!$mode_mismatch && !$sem_mismatch && $matched_has_workshop) {
             $course_fully_linked = true;
         } else {
             if ($mode_mismatch) {
@@ -271,39 +279,96 @@ function tp_render_teacher_dashboard($cmid, $instance, $context, $role, $OUTPUT,
             if ($sem_mismatch) {
                 $mismatch_details[] = 'Semester Code (Expected: <strong>' . s($semestercode) . '</strong>, Found: <strong>' . s($m_semestercode) . '</strong>)';
             }
+            if (!$matched_has_workshop) {
+                $mismatch_details[] = 'Course prefix is <strong>' . s($m_parsed['type'] ?: '(none)') . '</strong> — must be <strong>WORKSHOP</strong>';
+            }
         }
     }
 
-    // Only render matching info card if there is an issue (not linked or mismatch warning).
+    // ── Render the course-level status / suggestion card ─────────────────────
+    // Always shown unless fully linked (WORKSHOP + matching mode + semester).
     if (!$course_fully_linked) {
         echo html_writer::start_div('card mb-4');
         echo html_writer::start_div('card-header bg-light');
-        echo html_writer::tag('h5', 'Linked Project Submission Course Integration', ['class' => 'mb-0']);
+        echo html_writer::tag('h5', 'Linked WORKSHOP Course Integration', ['class' => 'mb-0']);
         echo html_writer::end_div();
         echo html_writer::start_div('card-body');
 
-        if ($matching_course) {
+        if ($matching_course && ($mode_mismatch || $sem_mismatch)) {
+            // Found a course with matching code but wrong mode/semester.
             echo html_writer::div(
-                html_writer::tag('strong', '⚠️ Match Warning: Linked course found with matching Course Code, but Study Mode or Semester does not match!') . '<br>' .
-                'Linked Course: ' . html_writer::link(new moodle_url('/course/view.php', ['id' => $matching_course->id]), s($matching_course->fullname) . ' (' . s($matching_course->shortname) . ')', ['target' => '_blank']) . '<br>' .
+                html_writer::tag('strong', '⚠️ Match Warning: A course was found with matching Course Code, but some fields do not match.') . '<br>' .
+                'Linked Course: ' . html_writer::link(new moodle_url('/course/view.php', ['id' => $matching_course->id]),
+                    s($matching_course->fullname) . ' (' . s($matching_course->shortname) . ')', ['target' => '_blank']) . '<br>' .
                 'Mismatched fields:<br>' .
-                html_writer::tag('ul', implode('', array_map(function($detail) {
-                    return html_writer::tag('li', $detail);
+                html_writer::tag('ul', implode('', array_map(function($d) {
+                    return html_writer::tag('li', $d);
                 }, $mismatch_details))) .
-                'Please align the shortnames so Course Code, Study Mode, and Semester match exactly.',
+                'Please align the shortnames so Course Code, Study Mode, and Semester match exactly, and ensure the course prefix is <strong>WORKSHOP</strong>.',
                 'alert alert-warning mt-3 mb-0'
             );
-        } else {
+
+        } elseif ($matching_course && !$matched_has_workshop) {
+            // Format matches but WORKSHOP prefix missing.
             echo html_writer::div(
-                html_writer::tag('strong', '❌ Course not found for linked') . '<br>' .
-                'No project submission course matches this activity automatically. ' .
-                'Please verify that a course exists whose shortname contains the Course Code (' . s($coursecode) . '), Study Mode (' . s($modecode) . '), and Semester (' . s($semestercode) . ') in a matching position.',
-                'alert alert-danger mt-3 mb-0'
+                html_writer::tag('strong', '⚠️ Format Match — WORKSHOP Prefix Required') . '<br>' .
+                'A course matching the Course Code, Study Mode, and Semester was found, but its shortname does not start with <strong>WORKSHOP</strong>:<br>' .
+                html_writer::link(new moodle_url('/course/view.php', ['id' => $matching_course->id]),
+                    s($matching_course->fullname) . ' (' . s($matching_course->shortname) . ')', ['target' => '_blank']) . '<br>' .
+                'This course will <strong>not</strong> be auto-linked. Rename its shortname to start with <code>WORKSHOP|</code> to enable auto-linking.',
+                'alert alert-warning mt-3 mb-3'
+            );
+
+        } else {
+            // No match at all.
+            echo html_writer::div(
+                html_writer::tag('strong', '❌ No WORKSHOP Course Found') . '<br>' .
+                'No course with a <strong>WORKSHOP</strong> prefix was automatically matched for Course Code <strong>' . s($coursecode) .
+                '</strong>, Mode <strong>' . s($modecode) . '</strong>, Semester <strong>' . s($semestercode) . '</strong>.',
+                'alert alert-danger mt-3 mb-3'
             );
         }
 
-        echo html_writer::end_div();
-        echo html_writer::end_div();
+        // ── Admin suggestion panel ────────────────────────────────────────────
+        // Only shown to users with course management rights (admin / teacher).
+        if (has_capability('moodle/course:manageactivities', $context) || is_siteadmin()) {
+            $suggestions = tp_find_workshop_suggestions($course->shortname, $course->id);
+
+            if (!empty($suggestions)) {
+                $sugg_html = '';
+                foreach ($suggestions as $s) {
+                    $sc          = $s['course'];
+                    $badge_class = $s['is_workshop'] ? 'badge-success' : 'badge-warning';
+                    $badge_text  = $s['is_workshop'] ? 'WORKSHOP ✅' : 'Missing WORKSHOP prefix ⚠️';
+                    $id_note     = $s['via_idnumber'] ? ' <em class="text-muted">(matched via idnumber)</em>' : '';
+
+                    $sugg_html .= html_writer::tag('li',
+                        html_writer::link(
+                            new moodle_url('/course/view.php', ['id' => $sc->id]),
+                            s($sc->fullname),
+                            ['target' => '_blank', 'class' => 'font-weight-bold']
+                        ) .
+                        ' <code>(' . s($sc->shortname) . ')</code>' .
+                        $id_note . ' ' .
+                        html_writer::span($badge_text, 'badge ' . $badge_class),
+                        ['class' => 'mb-2']
+                    );
+                }
+
+                echo html_writer::div(
+                    html_writer::tag('strong', '💡 Administrator Suggestion') . '<br>' .
+                    'The following course(s) match the format criteria (Course Code, Mode, Semester) ' .
+                    'and may be the correct project submission course. ' .
+                    'If the correct course is listed below, rename its shortname to start with <code>WORKSHOP|</code> ' .
+                    'and this activity will link automatically.' .
+                    html_writer::tag('ul', $sugg_html, ['class' => 'mt-2 mb-0']),
+                    'alert alert-info mt-2 mb-0'
+                );
+            }
+        }
+
+        echo html_writer::end_div(); // card-body
+        echo html_writer::end_div(); // card
     }
 
     $students = tp_get_instance_students($instance, $context);
@@ -325,39 +390,45 @@ function tp_render_teacher_dashboard($cmid, $instance, $context, $role, $OUTPUT,
 
     $i = 1;
 
-    // ── Resolve the linked course + assignment ONCE for this page (not per student) ──
-    // Automatic matching from the TP course shortname.
-    $tp_course       = $DB->get_record('course', ['id' => $instance->course]);
-    $matching_course = $tp_course ? tp_find_matching_course($tp_course->shortname, $tp_course->id) : null;
-    $matching_assign = $matching_course ? tp_find_matching_assignment($matching_course->id) : null;
-
-    $course_fully_linked = false;
-    if ($matching_course) {
-        $m_parsed = tp_parse_course_shortname($matching_course->shortname);
-        $m_modecode     = !empty($m_parsed['modecode']) ? $m_parsed['modecode'] : '';
-        $m_semestercode = !empty($m_parsed['semestercode']) ? $m_parsed['semestercode'] : '';
-
-        $mode_mismatch = (strval($modecode) !== 'N/A' && $m_modecode !== '' && strcasecmp($modecode, $m_modecode) !== 0);
-        $sem_mismatch  = (strval($semestercode) !== 'N/A' && $m_semestercode !== '' && strcasecmp($semestercode, $m_semestercode) !== 0);
-
-        if (!$mode_mismatch && !$sem_mismatch) {
-            $course_fully_linked = true;
-        }
-    }
+    // ── TP course record (needed for per-student workshop lookup) ─────────────
+    $tp_course = $DB->get_record('course', ['id' => $instance->course]);
 
     foreach ($students as $student) {
 
         tp_sync_student_performa($instance, $student->id);
 
+        // ── Per-student: find the WORKSHOP course this student is enrolled in ──
+        // Each student may be enrolled in a different WORKSHOP section/group for
+        // the same programme code. tp_find_student_workshop_course() checks:
+        //   • WORKSHOP prefix in shortname.
+        //   • Matching coursecode + modecode + semestercode.
+        //   • Matches on BOTH shortname segments AND course idnumber.
+        //   • Restricted to courses the student is actively enrolled in.
+        $s_workshop = $tp_course
+            ? tp_find_student_workshop_course($tp_course->shortname, $tp_course->id, $student->id)
+            : null;
+        $s_assign   = $s_workshop ? tp_find_matching_assignment($s_workshop->id) : null;
+
+        // Per-student linked check: code + mode + semester must all match.
+        $student_linked = false;
+        if ($s_workshop) {
+            $sw_parsed = tp_parse_course_shortname($s_workshop->shortname);
+            $sw_mode   = !empty($sw_parsed['modecode'])     ? $sw_parsed['modecode']     : '';
+            $sw_sem    = !empty($sw_parsed['semestercode']) ? $sw_parsed['semestercode'] : '';
+            $s_mm = (strval($modecode)     !== 'N/A' && $sw_mode !== '' && strcasecmp($modecode,     $sw_mode) !== 0);
+            $s_sm = (strval($semestercode) !== 'N/A' && $sw_sem  !== '' && strcasecmp($semestercode, $sw_sem)  !== 0);
+            $student_linked = !$s_mm && !$s_sm;
+        }
+
         $project_status = 'not_submitted';
-        if ($matching_assign) {
+        if ($s_assign) {
             $submission = $DB->get_record('assign_submission', [
-                'assignment' => $matching_assign->id,
+                'assignment' => $s_assign->id,
                 'userid'     => $student->id,
                 'latest'     => 1,
             ]);
             if ($submission && in_array($submission->status, ['submitted', 'graded'])) {
-                $submitted_and_graded = tp_is_assignment_submitted_and_graded($student->id, $matching_assign->id);
+                $submitted_and_graded = tp_is_assignment_submitted_and_graded($student->id, $s_assign->id);
                 if ($submitted_and_graded) {
                     $project_status = 'graded';
                 } else {
@@ -398,8 +469,13 @@ function tp_render_teacher_dashboard($cmid, $instance, $context, $role, $OUTPUT,
             $action = html_writer::link($cert_url, 'View Certificate',
                 ['class' => 'btn btn-sm btn-info']);
 
-        } elseif (!$course_fully_linked) {
-            $action = html_writer::span('Course not linked', 'text-danger small');
+        } elseif (!$student_linked) {
+            // Per-student: show the specific reason.
+            if (!$s_workshop) {
+                $action = html_writer::span('No WORKSHOP course found', 'text-danger small');
+            } else {
+                $action = html_writer::span('Course mismatch (mode/semester)', 'text-warning small');
+            }
 
         } elseif ($role === 'ct') {
             if (!$performa || $performa->status === TP_STATUS_PENDING) {

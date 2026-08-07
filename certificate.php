@@ -46,8 +46,12 @@ if ($viewer_role === 'student' && $USER->id != $student->id) {
     throw new moodle_exception('nopermissiontoviewfortrainee', 'mod_teachingpractice');
 }
 
-// Find matching course to check student project pass/fail status.
-$matching_course = tp_find_matching_course($course->shortname, $course->id);
+// Find the WORKSHOP course this specific student is enrolled in.
+// tp_find_student_workshop_course() checks:
+//   • WORKSHOP prefix, same coursecode, same mode, same semester.
+//   • Matches on both shortname segments AND the course idnumber field.
+//   • Restricted to courses the student is actively enrolled in.
+$matching_course = tp_find_student_workshop_course($course->shortname, $course->id, $studentid);
 $student_passes  = $matching_course
     ? tp_student_passes_course($student->id, $matching_course->id)
     : false;

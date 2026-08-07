@@ -813,18 +813,34 @@ function tp_issue_certificate($performa, $course_b_id) {
 }
 
 /**
- * Helper: Extract course code and school name from course full name if it follows the pipe-delimited format:
- * "9028|Islamic Public School|16BH|ODL|2513"
+ * Helper: Extract course code and school name from course full name.
  *
- * @param stdClass|null $course The current course object.
- * @param stdClass|null $matching_course The matching submission course object.
- * @return array Array containing 'coursecode' and 'schoolname' (both may be empty strings if not found).
+ * Supported pipe-delimited full name format:
+ *   TYPE | COURSECODE | SCHOOL NAME | ... (any number of extra segments)
+ *
+ * Examples:
+ *   "AIOU|8608|Islamic Public School|TAXILA|SMS|ODL|2611"
+ *   "Workshop|9028|Islamic Public School|16BH|ODL|2513"
+ *
+ * Extraction rules:
+ *   parts[0] = TYPE  (e.g. AIOU, Workshop, Assignment — ignored for display)
+ *   parts[1] = COURSECODE  (always the 2nd segment)
+ *   parts[2] = SCHOOL NAME (always the 3rd segment)
+ *
+ * Falls back gracefully:
+ *   - If only 2 parts: parts[0]=coursecode, parts[1]=schoolname (legacy).
+ *   - If no pipes at all: returns empty strings (callers fall back to profile data).
+ *
+ * @param stdClass|null $course The current TP course object.
+ * @param stdClass|null $matching_course The matching project-submission course object.
+ * @return array ['coursecode' => string, 'schoolname' => string]
  */
 function tp_extract_course_code_and_school_name($course, $matching_course = null) {
     $coursecode = '';
     $schoolname = '';
 
-    // First try the matching course's fullname if available.
+    // Priority: use the matching (project submission) course fullname first,
+    // then fall back to the TP course fullname.
     if ($matching_course && !empty($matching_course->fullname) && strpos($matching_course->fullname, '|') !== false) {
         $fullname = $matching_course->fullname;
     } else if ($course && !empty($course->fullname) && strpos($course->fullname, '|') !== false) {
@@ -834,11 +850,19 @@ function tp_extract_course_code_and_school_name($course, $matching_course = null
     }
 
     if ($fullname !== '') {
-        $parts = explode('|', $fullname);
-        if (count($parts) >= 2) {
-            $coursecode = trim($parts[0]);
-            $schoolname = trim($parts[1]);
+        $parts = array_map('trim', explode('|', $fullname));
+        $n     = count($parts);
+
+        if ($n >= 3) {
+            // New format: TYPE | COURSECODE | SCHOOL NAME | ...
+            $coursecode = $parts[1];  // always 2nd segment
+            $schoolname = $parts[2];  // always 3rd segment
+        } else if ($n === 2) {
+            // Legacy format (no TYPE prefix): COURSECODE | SCHOOL NAME
+            $coursecode = $parts[0];
+            $schoolname = $parts[1];
         }
+        // n < 2: no extraction possible — both remain empty strings.
     }
 
     return [
@@ -865,26 +889,45 @@ function tp_parse_course_shortname($shortname) {
     $shortname = trim($shortname);
 
     // ── Pipe-delimited format ─────────────────────────────────────────────────
-    // e.g. WORKSHOP|9028|G1474|16BH|ODL|2513 (6 parts with type prefix)
-    // or e.g. 9028|G1474|16BH|ODL|2513 (5 parts without type prefix)
+    //
+    // Supports variable-length shortnames with any number of middle segments.
+    //
+    // Rule:
+    //   • If the FIRST segment is numeric  → no TYPE prefix:
+    //       CODE | ... | MODE | SEMESTER
+    //       coursecode = parts[0]
+    //       modecode   = parts[n-2]  (always 2nd from last)
+    //       semester   = parts[n-1]  (always last)
+    //
+    //   • Otherwise → TYPE prefix present:
+    //       TYPE | CODE | ... | MODE | SEMESTER
+    //       coursecode = parts[1]
+    //       modecode   = parts[n-2]  (always 2nd from last)
+    //       semester   = parts[n-1]  (always last)
+    //
+    // Examples:
+    //   AIOU|8608|40|02605|60N3QL|TAXILA|SMS|ODL|2611  (9 parts, TYPE prefix)
+    //   WORKSHOP|9028|G1474|16BH|ODL|2513               (6 parts, TYPE prefix)
+    //   9028|G1474|16BH|ODL|2513                        (5 parts, no prefix)
     if (strpos($shortname, '|') !== false) {
         $parts = array_map('trim', explode('|', $shortname));
+        $n     = count($parts);
 
-        if (count($parts) === 5 || (isset($parts[0]) && is_numeric($parts[0]))) {
-            // 5-part shortname: 9028 | G1474 | 16BH | ODL | 2513
+        if (isset($parts[0]) && is_numeric($parts[0])) {
+            // No-prefix format: CODE | [middle...] | MODE | SEMESTER
             $type         = '';
-            $coursecode   = isset($parts[0]) ? $parts[0] : '';
-            $modecode     = isset($parts[3]) ? $parts[3] : '';
-            $semestercode = isset($parts[4]) ? $parts[4] : '';
+            $coursecode   = $parts[0];
+            $modecode     = ($n >= 2) ? $parts[$n - 2] : '';
+            $semestercode = ($n >= 1) ? $parts[$n - 1] : '';
             $tail         = $shortname;
         } else {
-            // 6-part shortname: WORKSHOP | 9028 | G1474 | 16BH | ODL | 2513
-            $type         = isset($parts[0]) ? $parts[0] : '';
+            // Prefixed format: TYPE | CODE | [middle...] | MODE | SEMESTER
+            $type         = $parts[0];
             $tail_parts   = array_slice($parts, 1);
             $tail         = implode('|', $tail_parts);
-            $coursecode   = isset($parts[1]) ? $parts[1] : '';
-            $modecode     = isset($parts[4]) ? $parts[4] : '';
-            $semestercode = isset($parts[5]) ? $parts[5] : '';
+            $coursecode   = ($n >= 2) ? $parts[1]      : '';
+            $modecode     = ($n >= 3) ? $parts[$n - 2] : '';
+            $semestercode = ($n >= 2) ? $parts[$n - 1] : '';
         }
 
         return [
@@ -1202,7 +1245,7 @@ function tp_find_matching_assignment($courseid) {
     }
 
     // Prioritize names containing common keywords.
-    $keywords = ['teaching practice', 'teachingpractice', 'project', 'submission', 'assignment'];
+    $keywords = ['teaching practice', 'teachingpractice', 'project', 'submission', 'assignment', 'research project', 'researchproject'];
     foreach ($keywords as $keyword) {
         foreach ($assigns as $a) {
             if (stripos($a->name, $keyword) !== false) {
@@ -1215,9 +1258,236 @@ function tp_find_matching_assignment($courseid) {
 }
 
 // ============================================================================
+// HELPER: Find the per-student WORKSHOP project-submission course.
+//
+// STRICT mode: ONLY returns courses whose shortname TYPE prefix (parts[0])
+// is exactly "WORKSHOP" (case-insensitive). No fallback to other course types.
+// A course that matches coursecode + mode + semester but lacks the WORKSHOP
+// prefix will NOT be linked — it will appear as a suggestion instead.
+//
+// Rules:
+//   1. Filters to only courses the specific student is actively enrolled in.
+//   2. TYPE prefix (parts[0]) MUST be "WORKSHOP".
+//   3. Matches on BOTH shortname segments AND the course idnumber field.
+//   4. coursecode = parts[1], modecode = parts[n-2], semestercode = parts[n-1].
+//
+// @param string $tp_shortname   Shortname of the Teaching Practice course.
+// @param int    $tp_course_id   ID of the TP course (excluded from results).
+// @param int    $studentid      User ID whose enrolments are checked.
+// @return stdClass|null         The matched WORKSHOP course, or null.
+// ============================================================================
+function tp_find_student_workshop_course($tp_shortname, $tp_course_id, $studentid) {
+    global $DB;
+
+    // Per-student, per-request cache.
+    static $cache = [];
+    $cache_key = $tp_shortname . '|excl:' . $tp_course_id . '|s:' . $studentid;
+    if (array_key_exists($cache_key, $cache)) {
+        return $cache[$cache_key];
+    }
+
+    $parsed       = tp_parse_course_shortname($tp_shortname);
+    $is_pipe      = $parsed['pipe_format'];
+    $coursecode   = $parsed['coursecode'];
+    $modecode     = $parsed['modecode'];
+    $semestercode = $parsed['semestercode'];
+
+    if (empty($coursecode)) {
+        $cache[$cache_key] = null;
+        return null;
+    }
+
+    // ── Enrollment join: only this student's active enrolments ────────────────
+    $enrol_join = "JOIN {enrol}            e  ON e.courseid  = c.id AND e.status = 0
+                   JOIN {user_enrolments}  ue ON ue.enrolid  = e.id
+                                             AND ue.userid   = :enrol_userid
+                                             AND ue.status   = 0";
+
+    $exclude_sql = $tp_course_id ? ' AND c.id != :excludeid' : '';
+
+    // ── Build LIKE patterns for shortname AND idnumber ────────────────────────
+    $like_code = '%' . $DB->sql_like_escape($coursecode) . '%';
+    $params = [
+        'enrol_userid' => $studentid,
+        'code_sn'      => $like_code,
+        'code_id'      => $like_code,
+    ];
+    if ($tp_course_id) {
+        $params['excludeid'] = $tp_course_id;
+    }
+
+    // Optional semester clause applied to both shortname and idnumber.
+    $sem_clause = '';
+    if (!empty($semestercode)) {
+        $like_sem         = '%' . $DB->sql_like_escape($semestercode) . '%';
+        $params['sem_sn'] = $like_sem;
+        $params['sem_id'] = $like_sem;
+        $sem_clause = " AND (
+            " . $DB->sql_like('c.shortname', ':sem_sn', false) . "
+            OR  " . $DB->sql_like('c.idnumber', ':sem_id', false) . "
+        )";
+    }
+
+    // Fetch candidates: coursecode present in shortname OR idnumber.
+    $sql = "SELECT c.id, c.fullname, c.shortname, c.idnumber
+              FROM {course} c
+              $enrol_join
+             WHERE c.id > 1
+               AND (
+                   " . $DB->sql_like('c.shortname', ':code_sn', false) . "
+                   OR " . $DB->sql_like('c.idnumber', ':code_id', false) . "
+               )
+               $sem_clause
+               $exclude_sql
+             ORDER BY c.id ASC";
+
+    $candidates = $DB->get_records_sql($sql, $params, 0, 30);
+
+    foreach ($candidates as $c) {
+        $cp    = tp_parse_course_shortname($c->shortname);
+        $ccode = $cp['coursecode'];
+        $cmode = $cp['modecode'];
+        $csem  = $cp['semestercode'];
+        $ctype = strtolower(trim($cp['type']));
+
+        // STRICT: WORKSHOP prefix is mandatory — skip everything else.
+        if (strpos($ctype, 'workshop') === false) {
+            continue;
+        }
+
+        // Coursecode must match via shortname segment OR idnumber.
+        $code_ok = strcasecmp($ccode, $coursecode) === 0
+                || (trim($c->idnumber) !== '' && strcasecmp(trim($c->idnumber), $coursecode) === 0);
+        if (!$code_ok) {
+            continue;
+        }
+
+        // Mode must match when both sides are non-empty.
+        if (!empty($modecode) && !empty($cmode) && strcasecmp($cmode, $modecode) !== 0) {
+            continue;
+        }
+
+        // Semester must match when both sides are non-empty.
+        if (!empty($semestercode) && !empty($csem) && strcasecmp($csem, $semestercode) !== 0) {
+            continue;
+        }
+
+        // All checks passed — this is the student's WORKSHOP course.
+        $cache[$cache_key] = $c;
+        return $c;
+    }
+
+    // No WORKSHOP course found for this student.
+    $cache[$cache_key] = null;
+    return null;
+}
+
+// ============================================================================
+// HELPER: Find ALL courses that match the TP course format criteria regardless
+// of their TYPE prefix and without filtering by student enrolment.
+//
+// Used exclusively for the ADMIN SUGGESTION PANEL shown when no WORKSHOP course
+// is automatically linked. Returns every course (any prefix) whose
+// coursecode + modecode + semestercode matches the TP course — so the admin can
+// see what exists and decide whether to rename a course prefix to WORKSHOP.
+//
+// Each result entry contains:
+//   'course'       stdClass  — the Moodle course record (id, fullname, shortname)
+//   'is_workshop'  bool      — true if shortname already has WORKSHOP prefix
+//   'type'         string    — the detected TYPE prefix (e.g. "ASSIGN", "AIOU", "")
+//   'via_idnumber' bool      — true if match was via idnumber rather than shortname
+//
+// @param string $tp_shortname  Shortname of the TP course.
+// @param int    $exclude_id    Course ID to exclude (the TP course itself).
+// @return array  Sorted array of suggestion entries (may be empty).
+// ============================================================================
+function tp_find_workshop_suggestions($tp_shortname, $exclude_id = 0) {
+    global $DB;
+
+    $parsed       = tp_parse_course_shortname($tp_shortname);
+    $coursecode   = $parsed['coursecode'];
+    $modecode     = $parsed['modecode'];
+    $semestercode = $parsed['semestercode'];
+
+    if (empty($coursecode)) {
+        return [];
+    }
+
+    $exclude_sql = $exclude_id ? ' AND c.id != :excludeid' : '';
+    $params = [];
+    if ($exclude_id) {
+        $params['excludeid'] = $exclude_id;
+    }
+
+    $like_code    = '%' . $DB->sql_like_escape($coursecode) . '%';
+    $params['cs'] = $like_code;
+    $params['ci'] = $like_code;
+
+    $sem_clause = '';
+    if (!empty($semestercode)) {
+        $like_sem    = '%' . $DB->sql_like_escape($semestercode) . '%';
+        $params['ss'] = $like_sem;
+        $params['si'] = $like_sem;
+        $sem_clause = " AND (
+            " . $DB->sql_like('c.shortname', ':ss', false) . "
+            OR  " . $DB->sql_like('c.idnumber', ':si', false) . "
+        )";
+    }
+
+    $sql = "SELECT c.id, c.fullname, c.shortname, c.idnumber
+              FROM {course} c
+             WHERE c.id > 1
+               AND (
+                   " . $DB->sql_like('c.shortname', ':cs', false) . "
+                   OR " . $DB->sql_like('c.idnumber', ':ci', false) . "
+               )
+               $sem_clause
+               $exclude_sql
+             ORDER BY c.shortname ASC";
+
+    $candidates = $DB->get_records_sql($sql, $params, 0, 20);
+
+    $suggestions = [];
+    foreach ($candidates as $c) {
+        $cp    = tp_parse_course_shortname($c->shortname);
+        $ccode = $cp['coursecode'];
+        $cmode = $cp['modecode'];
+        $csem  = $cp['semestercode'];
+        $ctype = strtolower(trim($cp['type']));
+
+        // Coursecode check: via shortname segment OR idnumber.
+        $code_via_sn = strcasecmp($ccode, $coursecode) === 0;
+        $code_via_id = (trim($c->idnumber) !== '' && strcasecmp(trim($c->idnumber), $coursecode) === 0);
+        if (!$code_via_sn && !$code_via_id) {
+            continue;
+        }
+
+        // Mode check (skip when either side is empty).
+        if (!empty($modecode) && !empty($cmode) && strcasecmp($cmode, $modecode) !== 0) {
+            continue;
+        }
+
+        // Semester check (skip when either side is empty).
+        if (!empty($semestercode) && !empty($csem) && strcasecmp($csem, $semestercode) !== 0) {
+            continue;
+        }
+
+        $suggestions[] = [
+            'course'       => $c,
+            'is_workshop'  => (strpos($ctype, 'workshop') !== false),
+            'type'         => $cp['type'],
+            'via_idnumber' => (!$code_via_sn && $code_via_id),
+        ];
+    }
+
+    return $suggestions;
+}
+
+// ============================================================================
 // HELPER: Check if student's assignment has been submitted AND graded
 // ============================================================================
 function tp_is_assignment_submitted_and_graded($studentid, $assignmentid) {
+
     global $DB;
     if (!$assignmentid) {
         return false;

@@ -38,8 +38,11 @@ if ($role === 'ct') {
     require_capability('mod/teachingpractice:fillht', $context);
 }
 
-// Ensure the course is fully linked and matched before allowing evaluation.
-$matching_course = tp_find_matching_course($course->shortname, $course->id);
+// Ensure the WORKSHOP course for this specific student is fully linked.
+// tp_find_student_workshop_course() requires WORKSHOP prefix, matches
+// coursecode + mode + semester on both shortname AND idnumber, and restricts
+// to courses the student is actively enrolled in.
+$matching_course = tp_find_student_workshop_course($course->shortname, $course->id, $studentid);
 $course_fully_linked = false;
 if ($matching_course) {
     $parsed = tp_parse_course_shortname($course->shortname);
@@ -62,7 +65,7 @@ if ($matching_course) {
 
 if (!$course_fully_linked) {
     throw new moodle_exception('error_course_not_linked', 'mod_teachingpractice', '', null,
-        'Evaluation cannot be performed because the project submission course is not linked or has matching errors.');
+        'Evaluation cannot be performed: no matching WORKSHOP course found for this student (checked shortname + idnumber, mode, and semester).');
 }
 
 
