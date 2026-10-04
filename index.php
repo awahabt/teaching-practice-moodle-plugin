@@ -3,7 +3,7 @@
  * index.php
  *
  * Required by Moodle for every activity module.
- * Lists all Research Project activity instances within a course.
+ * Lists all Teaching Practice activity instances within a course.
  *
  * URL: /mod/researchproject/index.php?id=COURSE_ID
  */
@@ -18,17 +18,17 @@ require_login($course);
 $PAGE->set_url(new moodle_url('/mod/researchproject/index.php', ['id' => $courseid]));
 $PAGE->set_context(context_course::instance($courseid));
 $PAGE->set_course($course);
-$PAGE->set_title($course->fullname . ' — Research Project Activities');
+$PAGE->set_title($course->fullname . ' — Teaching Practice Activities');
 $PAGE->set_heading($course->fullname);
 
 echo $OUTPUT->header();
-echo $OUTPUT->heading('Research Project Activities', 2);
+echo $OUTPUT->heading('Teaching Practice Activities', 2);
 
 // Fetch all instances in this course
 $instances = $DB->get_records('researchproject', ['course' => $courseid], 'name ASC');
 
 if (empty($instances)) {
-    echo $OUTPUT->notification('No Research Project activities found in this course.', 'info');
+    echo $OUTPUT->notification('No Teaching Practice activities found in this course.', 'info');
     echo $OUTPUT->footer();
     exit;
 }

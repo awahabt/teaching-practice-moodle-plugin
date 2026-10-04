@@ -2,25 +2,25 @@
 defined('MOODLE_INTERNAL') || die();
 
 // Plugin name — shown in "Add an activity" list
-$string['pluginname']               = 'Research Project';
-$string['modulename']               = 'Research Project';
-$string['modulenameplural']         = 'Research Projects';
-$string['modulename_help']          = 'The Research Project activity allows students to receive their completion certificate after evaluation by a Cooperating Teacher and Head Teacher.';
-$string['pluginadministration']    = 'Research Project administration';
+$string['pluginname']               = 'Teaching Practice';
+$string['modulename']               = 'Teaching Practice';
+$string['modulenameplural']         = 'Teaching Practices';
+$string['modulename_help']          = 'The Teaching Practice activity allows students to receive their completion certificate after evaluation by a Cooperating Teacher and Head Teacher.';
+$string['pluginadministration']    = 'Teaching Practice administration';
 
 // Capabilities
-$string['researchproject:addinstance']     = 'Add a new Research Project activity';
-$string['researchproject:view']            = 'View Research Project activity';
+$string['researchproject:addinstance']     = 'Add a new Teaching Practice activity';
+$string['researchproject:view']            = 'View Teaching Practice activity';
 $string['researchproject:fillct']          = 'Submit Cooperating Teacher evaluation';
 $string['researchproject:fillht']          = 'Submit Head Teacher evaluation';
-$string['researchproject:viewcertificate'] = 'View Research Project certificate';
+$string['researchproject:viewcertificate'] = 'View Teaching Practice certificate';
 
 // Backward compatibility capability strings if referenced
-$string['teachingpractice:addinstance']     = 'Add a new Research Project activity';
-$string['teachingpractice:view']            = 'View Research Project activity';
+$string['teachingpractice:addinstance']     = 'Add a new Teaching Practice activity';
+$string['teachingpractice:view']            = 'View Teaching Practice activity';
 $string['teachingpractice:fillct']          = 'Submit Cooperating Teacher evaluation';
 $string['teachingpractice:fillht']          = 'Submit Head Teacher evaluation';
-$string['teachingpractice:viewcertificate'] = 'View Research Project certificate';
+$string['teachingpractice:viewcertificate'] = 'View Teaching Practice certificate';
 
 // Activity settings form labels (mod_form.php)
 $string['linked_course']           = 'Linked Course (Project Submission Course)';
@@ -35,6 +35,7 @@ $string['ht_role']                 = 'Head Teacher Role';
 $string['ht_role_help']            = 'Select the Moodle role assigned to Head Teachers in this course.';
 $string['roles_heading']           = 'Role Configuration';
 $string['course_heading']          = 'Linked Course Configuration';
+
 
 // Performa form strings
 $string['registration_no']          = 'Registration No.';
@@ -107,5 +108,17 @@ $string['signature_image_help']      = 'Upload the digital signature image. Acce
 // Course Grade / Passing Criteria Settings
 $string['passing_heading']           = 'Course Passing Criteria';
 $string['passing_percentage']        = 'Minimum Passing Percentage (%)';
-$string['passing_percentage_help']   = 'Enter the minimum average percentage mark required across all graded assignments in the linked project-submission course for the student to receive a certificate (e.g., 50 for 50%).';
+$string['passing_percentage_help']   = 'Enter the minimum average percentage mark required across the graded assignment(s) named under "Grading Components" (or all graded assignments, if none are listed) in the linked project-submission course for the student to receive a certificate (e.g., 50 for 50%).';
+
+$string['require_submission_grading']      = 'Require Project Submission & Passing Grade';
+$string['require_submission_grading_help'] = 'When ticked (default), a student\'s certificate stays hidden until they have submitted their project in the linked project-submission course AND it has been graded at or above the passing percentage — in addition to both the Cooperating Teacher and Head Teacher evaluations being complete. When unticked, that submission/grading check is skipped entirely: the certificate becomes available as soon as both evaluations are complete, regardless of project submission or grade.';
+
+$string['grading_components_heading']      = 'Grading Components';
+$string['grading_components_heading_desc'] = 'Project-submission courses qualify when their shortname has the AIOU prefix, the TP role marker, the ODL mode, and a course code + semester code. Courses sharing the SAME course code AND the SAME semester code (e.g. several "8608" sections in semester "2611") are the same offering, so they share ONE dropdown below; a different course code or semester always gets its own. Select one component to check just that assignment\'s grade, or several to average across just those. Leave a group\'s field empty to use ALL of its assignments (the default behaviour).';
+$string['grading_components_none_found']   = 'No project-submission (AIOU-prefixed, TP-marked) courses were found yet. Dropdowns will appear here automatically once such courses exist — no further setup needed.';
+$string['grading_components_group_label']  = 'Course {$a->coursecode} — Semester {$a->semestercode}';
+$string['grading_components_for_course']   = 'Grading Components — {$a}';
+$string['grading_components_help']         = 'Select which assignment(s) in this course code + semester group should count towards the passing-grade calculation. Select none to use ALL of its assignments (the default behaviour).';
+$string['grading_components_group_empty']  = 'No assignments found in this group\'s course(s) yet — once you add one, reload this page and it will appear in the list below.';
+$string['grading_components_placeholder']  = 'Search for a component...';
 

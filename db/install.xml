@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <XMLDB PATH="mod/researchproject/db" VERSION="20241201"
-       COMMENT="Tables for Research Project activity module">
+       COMMENT="Tables for Teaching Practice activity module">
   <TABLES>
 
     <!--

@@ -116,13 +116,34 @@ class performa_form extends moodleform {
 
             // Subjects autocomplete field (searchable dropdown)
             $subjects_options = [
-                'Math' => 'Math',
-                'Science' => 'Science',
                 'English' => 'English',
                 'Urdu' => 'Urdu',
-                'Islamiyaat' => 'Islamiyaat',
+                'Mathematics' => 'Mathematics',
+                'Islamiat' => 'Islamiat',
+                'General Knowledge' => 'General Knowledge',
+                'Social Studies' => 'Social Studies',
+                'General Science' => 'General Science',
                 'History' => 'History',
-                
+                'Geography' => 'Geography',
+                'Pakistan Studies' => 'Pakistan Studies',
+                'Art' => 'Art',
+                'Artificial Intelligence & Robotics' => 'Artificial Intelligence & Robotics',
+                'Biology' => 'Biology',
+                'Chemistry' => 'Chemistry',
+                'Computer Science' => 'Computer Science',
+                'Computer Graphics & Animation' => 'Computer Graphics & Animation',
+                'Economics' => 'Economics',
+                'Education' => 'Education',
+                'Food & Nutrition' => 'Food & Nutrition',
+                'Health & Physical Education' => 'Health & Physical Education',
+                'Home Economics' => 'Home Economics',
+                'Physics' => 'Physics',
+                'Clothing & Textile' => 'Clothing & Textile',
+                'Islamic History' => 'Islamic History',
+                'Islamic Studies' => 'Islamic Studies',
+                'English Literature' => 'English Literature',
+                'Regional Languages' => 'Regional Languages',
+                'Arabic' => 'Arabic',
             ];
 
             // Dynamically add saved custom subjects to the options so they render as selected.

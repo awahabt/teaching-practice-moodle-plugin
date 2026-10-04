@@ -46,18 +46,28 @@ if ($viewer_role === 'student' && $USER->id != $student->id) {
     throw new moodle_exception('nopermissiontoviewfortrainee', 'mod_researchproject');
 }
 
-// Find the WORKSHOP course this specific student is enrolled in.
-// tp_find_student_workshop_course() checks:
-//   • WORKSHOP prefix, same coursecode, same mode, same semester.
+// Find the project-submission course this specific student is enrolled in.
+// tp_find_student_submission_course() checks:
+//   • AIOU prefix + TP role marker, same coursecode, same mode, same semester.
 //   • Matches on both shortname segments AND the course idnumber field.
 //   • Restricted to courses the student is actively enrolled in.
-$matching_course = tp_find_student_workshop_course($course->shortname, $course->id, $studentid);
+$matching_course = tp_find_student_submission_course($course->shortname, $course->id, $studentid);
+if ($matching_course) {
+    $mc_parsed = tp_parse_course_shortname($matching_course->shortname);
+    $grading_components = tp_get_grading_components($mc_parsed['coursecode'], $mc_parsed['semestercode']);
+} else {
+    $grading_components = [];
+}
 $student_passes  = $matching_course
-    ? tp_student_passes_course($student->id, $matching_course->id)
+    ? tp_student_passes_course($student->id, $matching_course->id, $grading_components)
     : false;
 $student_avg_pct = $matching_course
-    ? tp_get_student_average_grade_percentage($student->id, $matching_course->id)
+    ? tp_get_student_average_grade_percentage($student->id, $matching_course->id, $grading_components)
     : null;
+
+// Site-wide master switch — when OFF, the certificate skips the
+// submission/grading check entirely (Gate 2 below is bypassed).
+$require_grading = tp_requires_grading_before_certificate();
 
 // ── Gate 1: Evaluations not yet complete ─────────────────────────────────────
 if (!$performa || $performa->status !== TP_STATUS_COMPLETED) {
@@ -76,7 +86,9 @@ if (!$performa || $performa->status !== TP_STATUS_COMPLETED) {
 
 // ── Gate 2: Student has not met the passing grade criteria ───────────────────
 // Only applies when viewed by the student; CT / HT can always view certificates.
-if ($viewer_role === 'student' && !$student_passes) {
+// Skipped entirely when the "Require Project Submission & Passing Grade"
+// admin setting is turned OFF.
+if ($viewer_role === 'student' && $require_grading && !$student_passes) {
     echo $OUTPUT->header();
     if ($student_avg_pct === null) {
         // Assignments not yet graded.

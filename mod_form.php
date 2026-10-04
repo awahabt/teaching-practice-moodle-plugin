@@ -21,13 +21,18 @@ class mod_researchproject_mod_form extends moodleform_mod {
         $mform->addElement('text', 'name', get_string('modulename', 'mod_researchproject'), ['size' => 64]);
         $mform->setType('name', PARAM_TEXT);
         $mform->addRule('name', null, 'required', null, 'client');
-        $mform->setDefault('name', 'Research Project');
+        $mform->setDefault('name', 'Teaching Practice');
 
         // ── Description ───────────────────────────────────────────────────────
         $this->standard_intro_elements();
 
-        // Note: Linked course and assignment are resolved automatically from the
-        // course shortname format: TYPE|COURSECODE|GROUP|BATCH|MODE|SEMESTER
+        // Note: The linked project-submission course and assignment(s) are resolved
+        // automatically from the course shortname format:
+        //   AIOU|COURSECODE|...|ROLE|MODE|SEMESTER  (ROLE: TP = submission, SMS = certificate)
+        //
+        // Which assignment(s) count towards the passing-grade calculation is
+        // configured site-wide under Site administration > Plugins > Activity
+        // modules > Teaching Practice (see settings.php), not here.
 
         // ── Standard Moodle fields ────────────────────────────────────────────
         $this->standard_grading_coursemodule_elements();
