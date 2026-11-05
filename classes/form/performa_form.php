@@ -37,6 +37,8 @@ class performa_form extends moodleform {
         $mform->addElement('hidden', 'cmid', $cmid);
         $mform->addElement('hidden', 'studentid', $student->id);
         $mform->addElement('hidden', 'role', $role);
+        $mform->addElement('hidden', 'edit', !empty($this->_customdata['edit']) ? 1 : 0);
+        $mform->setType('edit', PARAM_BOOL);
         $mform->setType('cmid', PARAM_INT);
         $mform->setType('studentid', PARAM_INT);
         $mform->setType('role', PARAM_ALPHA);
@@ -113,6 +115,16 @@ class performa_form extends moodleform {
             // Start Date and End Date fields
             $mform->addElement('date_selector', 'ht_start_date', 'Start Date of Teaching Practice');
             $mform->addElement('date_selector', 'ht_end_date', 'End Date of Teaching Practice');
+
+            // Grades taught (Grade 1 - Grade 10), shown above subjects.
+            $grades_options = [];
+            for ($g = 1; $g <= 10; $g++) {
+                $grades_options['Grade ' . $g] = 'Grade ' . $g;
+            }
+            $mform->addElement('autocomplete', 'ht_grades', 'Grades Taught (Select at least 3)', $grades_options, [
+                'multiple' => true,
+            ]);
+            $mform->setType('ht_grades', PARAM_TEXT);
 
             // Subjects autocomplete field (searchable dropdown)
             $subjects_options = [
@@ -330,6 +342,9 @@ class performa_form extends moodleform {
                     if (!empty($performa->subject_3)) $selected_subjects[] = $performa->subject_3;
                 }
                 $formdefaults['ht_subjects'] = $selected_subjects;
+
+                $selected_grades = json_decode($performa->grades_taught ?? '', true);
+                $formdefaults['ht_grades'] = is_array($selected_grades) ? $selected_grades : [];
             }
 
             $this->set_data($formdefaults);
@@ -370,6 +385,11 @@ class performa_form extends moodleform {
 
             if ($start_date && $end_date && $end_date < $start_date) {
                 $errors['ht_end_date'] = 'End date cannot be earlier than start date.';
+            }
+
+            // Check grades (must select at least 3)
+            if (empty($data['ht_grades']) || !is_array($data['ht_grades']) || count($data['ht_grades']) < 3) {
+                $errors['ht_grades'] = 'Please select at least 3 grades.';
             }
 
             // Check subjects (must select at least 3)

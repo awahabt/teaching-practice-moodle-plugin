@@ -20,6 +20,7 @@ if (!$cmid) {
 }
 $studentid = required_param('studentid', PARAM_INT);
 $role      = required_param('role',      PARAM_ALPHA);
+$edit      = optional_param('edit', 0, PARAM_BOOL);
 
 if (!in_array($role, ['ct', 'ht'])) {
     throw new moodle_exception('invalidparameter', 'error');
@@ -74,10 +75,26 @@ $student  = $DB->get_record('user', ['id' => $studentid], '*', MUST_EXIST);
 // Auto-sync Section A from Moodle (profile + linked assignment submission).
 $performa = tp_sync_student_performa($instance, $studentid);
 
+// Edit mode: re-open an already submitted evaluation (admin switch must be on).
+// CT can update once submitted; HT can update once the certificate is issued.
+if ($edit) {
+    if (!tp_certificate_update_allowed()) {
+        throw new moodle_exception('error_certificate_update_disabled', 'mod_researchproject');
+    }
+    $editable = $performa && (
+        ($role === 'ct' && $performa->status !== TP_STATUS_PENDING) ||
+        ($role === 'ht' && $performa->status === TP_STATUS_COMPLETED)
+    );
+    if (!$editable) {
+        $edit = 0;
+    }
+}
+
 $PAGE->set_url(new moodle_url('/mod/researchproject/performa.php', [
     'id'        => $cmid,
     'studentid' => $studentid,
     'role'      => $role,
+    'edit'      => $edit,
 ]));
 $PAGE->set_context($context);
 $PAGE->set_course($course);
@@ -94,7 +111,7 @@ if ($role === 'ht') {
         );
         redirect(new moodle_url('/mod/researchproject/view.php', ['id' => $cmid]));
     }
-    if ($performa->status === TP_STATUS_COMPLETED) {
+    if ($performa->status === TP_STATUS_COMPLETED && !$edit) {
         \core\notification::info('Evaluation already completed. The certificate has been issued.');
         redirect(new moodle_url('/mod/researchproject/certificate.php', [
             'id'        => $cmid,
@@ -104,7 +121,7 @@ if ($role === 'ht') {
 }
 
 // Guard: CT cannot resubmit
-if ($role === 'ct' && $performa && $performa->status !== TP_STATUS_PENDING) {
+if ($role === 'ct' && $performa && $performa->status !== TP_STATUS_PENDING && !$edit) {
     \core\notification::info('You have already submitted the Cooperating Teacher evaluation for this student.');
     redirect(new moodle_url('/mod/researchproject/view.php', ['id' => $cmid]));
 }
@@ -129,6 +146,7 @@ $form = new performa_form(null, [
     'instance'    => $instance,
     'sectiondata' => $sectiondata,
     'certno'      => $certno,
+    'edit'        => $edit,
 ]);
 
 if ($form->is_cancelled()) {
@@ -166,12 +184,15 @@ if ($data = $form->get_data()) {
         $performa->ct_remarks                = $data->ct_remarks ?? '';
         $performa->ct_teacher_name           = $data->ct_teacher_name;
         $performa->ct_submitted_date         = time();
-        $performa->status                    = TP_STATUS_CT_DONE;
+        // On an update, keep the current status (a completed record stays completed).
+        if (!$edit) {
+            $performa->status                = TP_STATUS_CT_DONE;
+        }
         $performa->timemodified              = time();
         $DB->update_record('researchproject_performa', $performa);
 
         \core\notification::success(
-            get_string('msg_performa_saved', 'mod_researchproject')
+            get_string($edit ? 'msg_certificate_updated' : 'msg_performa_saved', 'mod_researchproject')
         );
         redirect(new moodle_url('/mod/researchproject/view.php', ['id' => $cmid]));
 
@@ -214,6 +235,10 @@ if ($data = $form->get_data()) {
             $performa->days_count = ($days > 0) ? (int)$days : 0;
         }
 
+        $selected_grades = isset($data->ht_grades) && is_array($data->ht_grades) ? array_values($data->ht_grades) : [];
+        natsort($selected_grades); // Keep Grade 1..10 order regardless of selection order.
+        $performa->grades_taught = json_encode(array_values($selected_grades));
+
         $selected_subjects = isset($data->ht_subjects) && is_array($data->ht_subjects) ? array_values($data->ht_subjects) : [];
         if (count($selected_subjects) > 3) {
             $performa->subject_1 = json_encode($selected_subjects);
@@ -236,6 +261,8 @@ if ($data = $form->get_data()) {
                 get_string('msg_certificate_issued', 'mod_researchproject') .
                 ' Certificate No: ' . $cert_no
             );
+        } else if ($edit) {
+            \core\notification::success(get_string('msg_certificate_updated', 'mod_researchproject'));
         } else {
             \core\notification::info('Evaluation submitted. Certificate was already issued previously.');
         }

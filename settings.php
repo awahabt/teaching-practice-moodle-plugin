@@ -97,6 +97,28 @@ if ($ADMIN->fulltree) {
         1
     ));
 
+    // Certificate management switches — let CT / HT update or delete the
+    // certificates of students they evaluated. Both off by default.
+    $settings->add(new admin_setting_heading(
+        'mod_researchproject/certificate_manage_heading_wrapper',
+        get_string('certificate_manage_heading', 'mod_researchproject'),
+        ''
+    ));
+
+    $settings->add(new admin_setting_configcheckbox(
+        'mod_researchproject/allow_certificate_update',
+        get_string('allow_certificate_update', 'mod_researchproject'),
+        get_string('allow_certificate_update_help', 'mod_researchproject'),
+        0
+    ));
+
+    $settings->add(new admin_setting_configcheckbox(
+        'mod_researchproject/allow_certificate_delete',
+        get_string('allow_certificate_delete', 'mod_researchproject'),
+        get_string('allow_certificate_delete_help', 'mod_researchproject'),
+        0
+    ));
+
     // ── Grading Components — one dropdown PER (course code + semester code) ──
     // group of project-submission (TP) courses. A course qualifies when its
     // shortname has the AIOU prefix, the same course code (2nd segment), the

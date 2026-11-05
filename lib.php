@@ -807,8 +807,42 @@ function tp_generate_certificate_number() {
     global $DB;
     $year  = date('Y');
     $count = $DB->count_records('researchproject_certificate');
-    $seq   = str_pad($count + 1, 5, '0', STR_PAD_LEFT);
-    return "AIOU-TP-{$year}-{$seq}";
+    // Certificates can be deleted, so the row count alone may collide with an
+    // existing number — step forward until the number is unused.
+    do {
+        $count++;
+        $seq     = str_pad($count, 5, '0', STR_PAD_LEFT);
+        $cert_no = "AIOU-TP-{$year}-{$seq}";
+    } while ($DB->record_exists('researchproject_certificate', ['certificate_no' => $cert_no]));
+    return $cert_no;
+}
+
+// ============================================================================
+// HELPER: Admin switches for letting CT / HT update or delete certificates
+// ============================================================================
+function tp_certificate_update_allowed() {
+    return (bool) get_config('mod_researchproject', 'allow_certificate_update');
+}
+
+function tp_certificate_delete_allowed() {
+    return (bool) get_config('mod_researchproject', 'allow_certificate_delete');
+}
+
+// ============================================================================
+// CORE: Delete a student's certificate and reset the deleting role's evaluation.
+//   - HT delete: certificate removed, status back to 'ct_done' so the HT can
+//     evaluate again (a new certificate number is issued on re-submit).
+//   - CT delete: certificate removed, status back to 'pending' so the CT and
+//     then the HT evaluate again.
+// ============================================================================
+function tp_delete_certificate($performa, $role) {
+    global $DB;
+
+    $DB->delete_records('researchproject_certificate', ['performaid' => $performa->id]);
+
+    $performa->status       = ($role === 'ct') ? TP_STATUS_PENDING : TP_STATUS_CT_DONE;
+    $performa->timemodified = time();
+    $DB->update_record('researchproject_performa', $performa);
 }
 
 // ============================================================================
@@ -1145,10 +1179,15 @@ function tp_get_submission_groups_with_components() {
     global $DB;
 
     // Narrow the course scan to AIOU-prefixed shortnames up front.
+    //
+    // No row cap here: the "AIOU|" shortname prefix is used university-wide
+    // (not just for TP courses), so on a large install there can be far more
+    // than a small fixed limit of matches — a capped, unordered query could
+    // fill up on unrelated courses before ever reaching the TP ones.
     $like  = $DB->sql_like_escape(TP_REQUIRED_PREFIX) . '|%';
     $sql   = "SELECT id, fullname, shortname FROM {course}
                WHERE id > 1 AND " . $DB->sql_like('shortname', ':prefix', false);
-    $courses = $DB->get_records_sql($sql, ['prefix' => $like], 0, 2000);
+    $courses = $DB->get_records_sql($sql, ['prefix' => $like]);
 
     $groups = []; // key => ['coursecode', 'semestercode', 'courses' => [...]]
     foreach ($courses as $c) {
