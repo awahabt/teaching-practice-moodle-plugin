@@ -117,10 +117,7 @@ class performa_form extends moodleform {
             $mform->addElement('date_selector', 'ht_end_date', 'End Date of Teaching Practice');
 
             // Grades taught (Grade 1 - Grade 10), shown above subjects.
-            $grades_options = [];
-            for ($g = 1; $g <= 10; $g++) {
-                $grades_options['Grade ' . $g] = 'Grade ' . $g;
-            }
+            $grades_options = tp_get_grade_options();
             $mform->addElement('autocomplete', 'ht_grades', 'Grades Taught (Select at least 3)', $grades_options, [
                 'multiple' => true,
             ]);
@@ -158,27 +155,60 @@ class performa_form extends moodleform {
                 'Arabic' => 'Arabic',
             ];
 
-            // Dynamically add saved custom subjects to the options so they render as selected.
-            if ($performa && $role === 'ht') {
-                $predefined_keys = array_keys($subjects_options);
-                foreach (['subject_1', 'subject_2', 'subject_3'] as $field) {
-                    if (!empty($performa->$field)) {
-                        $val = $performa->$field;
-                        if (!in_array($val, $predefined_keys)) {
-                            $subjects_options[$val] = $val;
-                        }
-                    }
+            // Saved per-grade subjects (used for defaults and to keep custom subjects selectable).
+            $saved_grade_subjects = $performa ? tp_get_grade_subjects($performa) : [];
+            foreach ($saved_grade_subjects as $gsubjects) {
+                foreach ($gsubjects as $val) {
+                    $subjects_options[$val] = $val;
                 }
             }
 
-            $mform->addElement('autocomplete', 'ht_subjects', 'Subjects Taught (Select at least 3)', $subjects_options, [
-                'multiple' => true,
-                'tags' => true,
-            ]);
-            $mform->setType('ht_subjects', PARAM_TEXT);
+            // One "Subjects Taught" picker per grade. Only the pickers for the
+            // grades selected above are shown (toggled by the script below).
+            $mform->addElement('html',
+                '<p class="text-muted mt-3 mb-2" id="ht-grade-subjects-help">' .
+                'For each grade selected above, choose the subject(s) taught in that grade. ' .
+                'You may type a subject that is not in the list and press Enter.</p>');
+
+            foreach ($grades_options as $grade) {
+                $field = tp_grade_subject_field($grade);
+                $mform->addElement('autocomplete', $field, 'Subjects Taught in ' . $grade, $subjects_options, [
+                    'multiple' => true,
+                    'tags' => true,
+                ]);
+                $mform->setType($field, PARAM_TEXT);
+            }
+
+            $grade_field_map = [];
+            foreach ($grades_options as $grade) {
+                $grade_field_map[$grade] = 'id_' . tp_grade_subject_field($grade);
+            }
 
             $mform->addElement('html', '
                 <div id="subject-spelling-warning" class="alert alert-warning mt-2 mb-2" style="display:none; padding: 8px 12px; font-size: 0.9rem;"></div>
+                <script>
+                document.addEventListener("DOMContentLoaded", function() {
+                    // Show the subject picker of each selected grade, hide the rest.
+                    var gradeFields = ' . json_encode($grade_field_map) . ';
+                    function toggleGradeSubjectFields() {
+                        var gradeSelect = document.getElementById("id_ht_grades");
+                        var selected = gradeSelect ? Array.from(gradeSelect.selectedOptions).map(function(o) { return o.value; }) : [];
+                        Object.keys(gradeFields).forEach(function(grade) {
+                            var el = document.getElementById(gradeFields[grade]);
+                            var row = el ? (el.closest(".fitem") || el.closest(".form-group")) : null;
+                            if (row) {
+                                row.style.display = selected.indexOf(grade) !== -1 ? "" : "none";
+                            }
+                        });
+                        var help = document.getElementById("ht-grade-subjects-help");
+                        if (help) { help.style.display = selected.length ? "" : "none"; }
+                    }
+                    var gradeSelectEl = document.getElementById("id_ht_grades");
+                    if (gradeSelectEl) { gradeSelectEl.addEventListener("change", toggleGradeSubjectFields); }
+                    toggleGradeSubjectFields();
+                    setInterval(toggleGradeSubjectFields, 700);
+                });
+                </script>
                 <script>
                 document.addEventListener("DOMContentLoaded", function() {
                     const dictionary = ["Accounting",  "Agriculture",  "Anatomy",  "Arabic",  "Art",  "Artificial Intelligence",  "Astronomy",  "Biochemistry",  "Biology",  "Botany",  "Business Administration",  "Business Studies",  "Calculus",  "Chemistry",  "Civics",  "Commerce",  "Communication Skills",  "Computer Applications",  "Computer Science",  "Creative Writing",  "Data Science",  "Design",  "Digital Literacy",  "Economics",  "Education",  "Electrical Engineering",  "Electronics",  "English",  "Environmental Science",  "Ethics",  "Finance",  "Fine Arts",  "Food Science",  "French",  "General Knowledge",  "Geography",  "Geology",  "Graphic Design",  "Health Education",  "Hindi",  "History",  "Home Economics",  "Human Resource Management",  "Information Technology",  "International Relations",  "Islamic Studies",  "Journalism",  "Law",  "Library Science",  "Linguistics",  "Literature",  "Management",  "Marketing",  "Mathematics",  "Mechanical Engineering",  "Media Studies",  "Microbiology",  "Music",  "Natural Science",  "Nursing",  "Pak Studies",  "Persian",  "Philosophy",  "Physical Education",  "Physics",  "Political Science",  "Programming",  "Psychology",  "Public Administration",  "Public Speaking",  "Punjabi",  "Research Methodology",  "Robotics",  "Science",  "Sindhi",  "Social Studies",  "Sociology",  "Software Engineering",  "Spanish",  "Statistics",  "Urdu",  "Veterinary Science",  "Web Development",  "World History",  "Zoology"];
@@ -230,36 +260,35 @@ class performa_form extends moodleform {
                         return null;
                     }
 
-                    var inputField = document.getElementById("id_ht_subjects-input");
-                    if (!inputField) {
-                        var wrapper = document.getElementById("id_ht_subjects");
-                        if (wrapper) {
-                            var container = wrapper.closest(".form-autocomplete-selection") || wrapper.parentNode;
-                            inputField = container.querySelector("input[type=\'text\']");
-                        }
-                    }
-
                     var warningDiv = document.getElementById("subject-spelling-warning");
+
+                    function subjectSelects() {
+                        return Array.from(document.querySelectorAll("select[id^=\'id_ht_gsub_\']"));
+                    }
 
                     function updateSpellingWarning() {
                         var warnings = [];
-                        if (inputField) {
+                        // Text currently being typed in any per-grade subject box.
+                        document.querySelectorAll("input[id^=\'id_ht_gsub_\'][id$=\'-input\'], .fitem input[type=\'text\'][id*=\'ht_gsub_\']").forEach(function(inputField) {
                             var typedVal = inputField.value.trim();
                             var suggestion = checkWord(typedVal);
                             if (suggestion) {
                                 warnings.push("Did you mean \"<strong>" + suggestion + "</strong>\" instead of \"" + typedVal + "\"?");
                             }
-                        }
-                        var select = document.getElementById("id_ht_subjects");
-                        if (select) {
-                            var selectedOptions = Array.from(select.selectedOptions).map(o => o.value);
-                            selectedOptions.forEach(val => {
+                        });
+                        // Already-selected subjects in every visible grade.
+                        subjectSelects().forEach(function(select) {
+                            var row = select.closest(".fitem") || select.closest(".form-group");
+                            if (row && row.style.display === "none") { return; }
+                            Array.from(select.selectedOptions).forEach(function(o) {
+                                var val = o.value;
                                 var suggestion = checkWord(val);
                                 if (suggestion) {
                                     warnings.push("Selected subject \"" + val + "\" might be misspelled. Did you mean \"<strong>" + suggestion + "</strong>\"?");
                                 }
                             });
-                        }
+                        });
+                        warnings = warnings.filter(function(w, i) { return warnings.indexOf(w) === i; });
                         if (warnings.length > 0) {
                             warningDiv.innerHTML = "⚠️ " + warnings.join("<br>⚠️ ");
                             warningDiv.style.display = "block";
@@ -269,13 +298,9 @@ class performa_form extends moodleform {
                         }
                     }
 
-                    if (inputField) {
-                        inputField.addEventListener("input", updateSpellingWarning);
-                    }
-                    var selectEl = document.getElementById("id_ht_subjects");
-                    if (selectEl) {
+                    subjectSelects().forEach(function(selectEl) {
                         selectEl.addEventListener("change", updateSpellingWarning);
-                    }
+                    });
                     setInterval(updateSpellingWarning, 1000);
                 });
                 </script>
@@ -303,11 +328,10 @@ class performa_form extends moodleform {
                 $mform->setType($field, PARAM_ALPHA);
             }
 
-            // Overall recommendation — select dropdown menu
-            $rec_opts_select = ['' => 'Choose...'] + $rec_opts;
-            $mform->addElement('select', 'ht_overall_recommendation', 'Overall Recommendation', $rec_opts_select);
-            $mform->addRule('ht_overall_recommendation',
-                'Please select an overall recommendation.', 'required', null, 'client');
+            // Overall recommendation — single check mark.
+            // Ticked → 'completed', unticked → '' (rejected in validation()).
+            $mform->addElement('advcheckbox', 'ht_overall_recommendation', 'Overall Recommendation',
+                $rec_opts['completed'], null, ['', 'completed']);
             $mform->setType('ht_overall_recommendation', PARAM_ALPHANUMEXT);
 
             $mform->addElement('textarea', 'ht_remarks',
@@ -322,7 +346,11 @@ class performa_form extends moodleform {
         }
 
         if ($performa) {
-            $formdefaults = (array) $performa;
+            // Drop empty values so cleared fields don't override setDefault()
+            // (e.g. the teacher name defaulting to the current user).
+            $formdefaults = array_filter((array) $performa, function($v) {
+                return $v !== null && $v !== '';
+            });
             unset($formdefaults['id']);
 
             if ($role === 'ht') {
@@ -332,19 +360,12 @@ class performa_form extends moodleform {
                 if (!empty($performa->end_date)) {
                     $formdefaults['ht_end_date'] = $performa->end_date;
                 }
-                $selected_subjects = [];
-                $decoded = json_decode($performa->subject_1, true);
-                if (is_array($decoded)) {
-                    $selected_subjects = $decoded;
-                } else {
-                    if (!empty($performa->subject_1)) $selected_subjects[] = $performa->subject_1;
-                    if (!empty($performa->subject_2)) $selected_subjects[] = $performa->subject_2;
-                    if (!empty($performa->subject_3)) $selected_subjects[] = $performa->subject_3;
-                }
-                $formdefaults['ht_subjects'] = $selected_subjects;
-
                 $selected_grades = json_decode($performa->grades_taught ?? '', true);
                 $formdefaults['ht_grades'] = is_array($selected_grades) ? $selected_grades : [];
+
+                foreach ($saved_grade_subjects as $grade => $gsubjects) {
+                    $formdefaults[tp_grade_subject_field($grade)] = $gsubjects;
+                }
             }
 
             $this->set_data($formdefaults);
@@ -392,11 +413,30 @@ class performa_form extends moodleform {
                 $errors['ht_grades'] = 'Please select at least 3 grades.';
             }
 
-            // Check subjects (must select at least 3)
-            if (empty($data['ht_subjects']) || !is_array($data['ht_subjects']) || count($data['ht_subjects']) < 3) {
-                $errors['ht_subjects'] = 'Please select at least 3 subjects.';
-            } else if (in_array('Other', $data['ht_subjects'])) {
-                $errors['ht_subjects'] = 'Please type your custom subject and press Enter, or remove "Other" from the list.';
+            // Overall recommendation check mark must be ticked.
+            if (empty($data['ht_overall_recommendation']) || $data['ht_overall_recommendation'] !== 'completed') {
+                $errors['ht_overall_recommendation'] = 'Please tick "' .
+                    get_string('rec_completed', 'mod_researchproject') . '" to confirm the overall recommendation.';
+            }
+
+            // Every selected grade must have at least one subject.
+            $all_subjects = [];
+            $grades = (!empty($data['ht_grades']) && is_array($data['ht_grades'])) ? $data['ht_grades'] : [];
+            foreach ($grades as $grade) {
+                $field = tp_grade_subject_field($grade);
+                $gsubjects = (!empty($data[$field]) && is_array($data[$field])) ? $data[$field] : [];
+                if (empty($gsubjects)) {
+                    $errors[$field] = 'Please select at least one subject taught in ' . $grade . '.';
+                } else if (in_array('Other', $gsubjects)) {
+                    $errors[$field] = 'Please type your custom subject and press Enter, or remove "Other" from the list.';
+                }
+                $all_subjects = array_merge($all_subjects, $gsubjects);
+            }
+
+            // Overall, at least 3 different subjects must be taught.
+            $all_subjects = array_unique(array_map('core_text::strtolower', $all_subjects));
+            if ($grades && count($all_subjects) < 3 && empty($errors['ht_grades'])) {
+                $errors['ht_grades'] = 'Please select at least 3 different subjects across the selected grades.';
             }
         }
 

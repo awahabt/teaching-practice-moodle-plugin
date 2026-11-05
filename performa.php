@@ -239,9 +239,29 @@ if ($data = $form->get_data()) {
         natsort($selected_grades); // Keep Grade 1..10 order regardless of selection order.
         $performa->grades_taught = json_encode(array_values($selected_grades));
 
-        $selected_subjects = isset($data->ht_subjects) && is_array($data->ht_subjects) ? array_values($data->ht_subjects) : [];
+        // Subjects taught per grade: {"Grade 3": ["English", "Urdu"], ...}
+        $grade_subjects    = [];
+        $selected_subjects = [];
+        foreach ($selected_grades as $grade) {
+            $field     = tp_grade_subject_field($grade);
+            $gsubjects = isset($data->$field) && is_array($data->$field) ? $data->$field : [];
+            $gsubjects = array_values(array_unique(array_filter(array_map('trim', $gsubjects), 'strlen')));
+            if ($gsubjects) {
+                $grade_subjects[$grade] = $gsubjects;
+                $selected_subjects      = array_merge($selected_subjects, $gsubjects);
+            }
+        }
+        $performa->grade_subjects = json_encode($grade_subjects);
+
+        // Keep the legacy flat subject columns filled (all distinct subjects).
+        $selected_subjects = array_values(array_unique($selected_subjects));
         if (count($selected_subjects) > 3) {
-            $performa->subject_1 = json_encode($selected_subjects);
+            // subject_1 is char(255); the full list lives in grade_subjects.
+            $legacy = $selected_subjects;
+            while (count($legacy) > 1 && core_text::strlen(json_encode($legacy)) > 255) {
+                array_pop($legacy);
+            }
+            $performa->subject_1 = json_encode($legacy);
             $performa->subject_2 = '';
             $performa->subject_3 = '';
         } else {

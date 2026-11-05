@@ -145,8 +145,8 @@ function tp_get_rating_options() {
 function tp_get_recommendation_options() {
     return [
         'completed'           => get_string('rec_completed',           'mod_researchproject'),
-        'completed_minor'     => get_string('rec_completed_minor',     'mod_researchproject'),
-        'further_improvement' => get_string('rec_further_improvement', 'mod_researchproject'),
+        // 'completed_minor'     => get_string('rec_completed_minor',     'mod_researchproject'),
+        // 'further_improvement' => get_string('rec_further_improvement', 'mod_researchproject'),
     ];
 }
 
@@ -172,6 +172,7 @@ function tp_recommendation_label($value) {
         'completed'           => 'Successfully Completed Teaching Practice',
         'completed_minor'     => 'Successfully Completed with Minor Recommendations',
         'further_improvement' => 'Further Improvement Recommended',
+        'not_completed'       => 'Not Completed Teaching Practice',
     ];
     return $map[$value] ?? '--';
 }
@@ -818,31 +819,10 @@ function tp_generate_certificate_number() {
 }
 
 // ============================================================================
-// HELPER: Admin switches for letting CT / HT update or delete certificates
+// HELPER: Admin switch for letting CT / HT update certificates
 // ============================================================================
 function tp_certificate_update_allowed() {
     return (bool) get_config('mod_researchproject', 'allow_certificate_update');
-}
-
-function tp_certificate_delete_allowed() {
-    return (bool) get_config('mod_researchproject', 'allow_certificate_delete');
-}
-
-// ============================================================================
-// CORE: Delete a student's certificate and reset the deleting role's evaluation.
-//   - HT delete: certificate removed, status back to 'ct_done' so the HT can
-//     evaluate again (a new certificate number is issued on re-submit).
-//   - CT delete: certificate removed, status back to 'pending' so the CT and
-//     then the HT evaluate again.
-// ============================================================================
-function tp_delete_certificate($performa, $role) {
-    global $DB;
-
-    $DB->delete_records('researchproject_certificate', ['performaid' => $performa->id]);
-
-    $performa->status       = ($role === 'ct') ? TP_STATUS_PENDING : TP_STATUS_CT_DONE;
-    $performa->timemodified = time();
-    $DB->update_record('researchproject_performa', $performa);
 }
 
 // ============================================================================
@@ -1912,4 +1892,45 @@ function mod_researchproject_pluginfile($course, $cm, $context, $filearea, $args
 
 function mod_teachingpractice_pluginfile($course, $cm, $context, $filearea, $args, $forcedownload, array $options = []) {
     return mod_researchproject_pluginfile($course, $cm, $context, $filearea, $args, $forcedownload, $options);
+}
+// ============================================================================
+// HELPER: Grade-wise subjects (Head Teacher evaluation)
+// ============================================================================
+
+/**
+ * Form element name holding the subjects for one grade, e.g. 'Grade 3' => 'ht_gsub_3'.
+ */
+function tp_grade_subject_field($grade) {
+    return 'ht_gsub_' . preg_replace('/[^0-9a-z]/i', '', (string) $grade);
+}
+
+/**
+ * Grades the Head Teacher can choose from.
+ */
+function tp_get_grade_options() {
+    $grades = [];
+    for ($g = 1; $g <= 10; $g++) {
+        $grades['Grade ' . $g] = 'Grade ' . $g;
+    }
+    return $grades;
+}
+
+/**
+ * Decode the stored grade => subjects map, ordered by grade (Grade 1..10).
+ * Returns an empty array for legacy records that only have flat lists.
+ */
+function tp_get_grade_subjects($performa) {
+    $map = json_decode($performa->grade_subjects ?? '', true);
+    if (!is_array($map)) {
+        return [];
+    }
+    $clean = [];
+    foreach ($map as $grade => $subjects) {
+        $subjects = is_array($subjects) ? array_values(array_filter(array_map('trim', $subjects), 'strlen')) : [];
+        if ($grade !== '' && $subjects) {
+            $clean[$grade] = $subjects;
+        }
+    }
+    uksort($clean, 'strnatcasecmp');
+    return $clean;
 }

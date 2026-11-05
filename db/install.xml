@@ -51,6 +51,7 @@
         <FIELD NAME="subject_2"                 TYPE="char" LENGTH="255" NOTNULL="false"/>
         <FIELD NAME="subject_3"                 TYPE="char" LENGTH="255" NOTNULL="false"/>
         <FIELD NAME="grades_taught"             TYPE="char" LENGTH="255" NOTNULL="false" COMMENT="JSON array of grades taught, set by Head Teacher"/>
+        <FIELD NAME="grade_subjects"            TYPE="text" NOTNULL="false" COMMENT="JSON map of grade => subjects taught in that grade, set by Head Teacher"/>
         <!-- Cooperating Teacher ratings -->
         <FIELD NAME="ct_subject_knowledge"       TYPE="char" LENGTH="30" NOTNULL="false"/>
         <FIELD NAME="ct_lesson_planning"         TYPE="char" LENGTH="30" NOTNULL="false"/>

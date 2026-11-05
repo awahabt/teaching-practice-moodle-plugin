@@ -555,28 +555,17 @@ function tp_render_teacher_dashboard($cmid, $instance, $context, $role, $OUTPUT,
             $action = html_writer::link($cert_url, 'View Certificate',
                 ['class' => 'btn btn-sm btn-info mb-1']);
 
-            // Update / Delete buttons — only for the CT / HT, and only when the
-            // matching admin switch is turned on.
-            if (in_array($role, ['ct', 'ht'])) {
-                if (tp_certificate_update_allowed()) {
-                    $edit_url = new moodle_url('/mod/researchproject/performa.php', [
-                        'id'        => $cmid,
-                        'studentid' => $student->id,
-                        'role'      => $role,
-                        'edit'      => 1,
-                    ]);
-                    $action .= ' ' . html_writer::link($edit_url, 'Update Certificate',
-                        ['class' => 'btn btn-sm btn-warning mb-1']);
-                }
-                if (tp_certificate_delete_allowed()) {
-                    $delete_url = new moodle_url('/mod/researchproject/delete_certificate.php', [
-                        'id'        => $cmid,
-                        'studentid' => $student->id,
-                        'role'      => $role,
-                    ]);
-                    $action .= ' ' . html_writer::link($delete_url, 'Delete Certificate',
-                        ['class' => 'btn btn-sm btn-danger mb-1']);
-                }
+            // Update button — only for the CT / HT, and only when the admin
+            // switch is turned on.
+            if (in_array($role, ['ct', 'ht']) && tp_certificate_update_allowed()) {
+                $edit_url = new moodle_url('/mod/researchproject/performa.php', [
+                    'id'        => $cmid,
+                    'studentid' => $student->id,
+                    'role'      => $role,
+                    'edit'      => 1,
+                ]);
+                $action .= ' ' . html_writer::link($edit_url, 'Update Certificate',
+                    ['class' => 'btn btn-sm btn-warning mb-1']);
             }
 
         } elseif (!$student_linked) {

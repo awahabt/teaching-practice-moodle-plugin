@@ -68,6 +68,7 @@ $string['rating_needsimprovement']  = 'Needs Improvement';
 $string['rec_completed']            = 'Successfully Completed Teaching Practice';
 $string['rec_completed_minor']      = 'Successfully Completed with Minor Recommendations';
 $string['rec_further_improvement']  = 'Further Improvement Recommended';
+$string['rec_not_completed']        = 'Not Completed Teaching Practice';
 
 // Status messages shown on screen
 $string['status_pending']           = 'Pending';
@@ -127,10 +128,5 @@ $string['grading_components_placeholder']  = 'Search for a component...';
 $string['certificate_manage_heading']     = 'Certificate Management';
 $string['allow_certificate_update']       = 'Allow Update Certificate';
 $string['allow_certificate_update_help']  = 'When ticked, Cooperating Teachers and Head Teachers can re-open and update their submitted evaluation for a student. The certificate keeps its number and shows the updated details.';
-$string['allow_certificate_delete']       = 'Allow Delete Certificate';
-$string['allow_certificate_delete_help']  = 'When ticked, Cooperating Teachers and Head Teachers can delete a student\'s issued certificate. A Head Teacher delete sends the student back to "waiting for HT evaluation"; a Cooperating Teacher delete sends the student back to "pending" so both evaluations must be filled again. A new certificate number is issued on re-submission.';
-$string['confirm_delete_certificate']     = 'Are you sure you want to delete the certificate ({$a->certno}) of {$a->student}? Your evaluation will need to be submitted again.';
-$string['msg_certificate_deleted']        = 'Certificate deleted. The evaluation can now be submitted again.';
 $string['msg_certificate_updated']        = 'Evaluation updated. The certificate now shows the updated details.';
 $string['error_certificate_update_disabled'] = 'Updating certificates is disabled by the site administrator.';
-$string['error_certificate_delete_disabled'] = 'Deleting certificates is disabled by the site administrator.';

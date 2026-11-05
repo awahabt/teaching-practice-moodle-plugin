@@ -139,7 +139,7 @@ $end_date = date('d F Y', $performa->end_date);
 $issued_date = date('d F Y', $certificate->issued_date);
 
 // Build subjects list (exclude empty values)
-$decoded = json_decode($performa->subject_1, true);
+$decoded = json_decode($performa->subject_1 ?? '', true);
 if (is_array($decoded)) {
     $subjects = $decoded;
 } else {
@@ -153,6 +153,10 @@ if (is_array($decoded)) {
 // Grades taught (stored as JSON array by the Head Teacher)
 $grades = json_decode($performa->grades_taught ?? '', true);
 $grades = is_array($grades) ? array_filter($grades) : [];
+
+// Subjects taught in each grade (newer records). Empty for legacy records,
+// which fall back to the flat grade / subject lists.
+$grade_subjects = tp_get_grade_subjects($performa);
 
 // Extract course code and school name from fullname if formatted using pipes.
 $extracted = tp_extract_course_code_and_school_name($course, $matching_course);
@@ -487,6 +491,25 @@ echo $OUTPUT->header();
             <strong><?php echo s($performa->ct_teacher_name); ?></strong>.
         </p>
 
+        <?php if (!empty($grade_subjects)): ?>
+            <p>During the teaching practice in school, the trainee teacher taught the following grade(s) and subject(s):</p>
+            <table class="eval-table grade-subjects-table">
+                <thead>
+                    <tr>
+                        <th style="width:30%;">Grade</th>
+                        <th>Subject(s) Taught</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($grade_subjects as $grad => $gsubjects): ?>
+                        <tr>
+                            <td><strong><?php echo s($grad); ?></strong></td>
+                            <td><?php echo s(implode(', ', $gsubjects)); ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        <?php else: ?>
         <?php if (!empty($grades)): ?>
             <p>During the teaching practice in school, the trainee teacher taught the following grade(s):</p>
             <ul class="cert-subj-grades">
@@ -503,6 +526,7 @@ echo $OUTPUT->header();
                     <li><strong><?php echo s($subj); ?></strong></li>
                 <?php endforeach; ?>
             </ul>
+        <?php endif; ?>
         <?php endif; ?>
     </div>
 
