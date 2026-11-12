@@ -112,5 +112,30 @@
       </INDEXES>
     </TABLE>
 
+    <!--
+      TABLE 4: researchproject_feedback
+      System-improvement feedback from Cooperating / Head Teachers.
+      One row per user per activity instance (editable).
+    -->
+    <TABLE NAME="researchproject_feedback" COMMENT="CT / HT feedback on the system">
+      <FIELDS>
+        <FIELD NAME="id"           TYPE="int"  LENGTH="10" NOTNULL="true" SEQUENCE="true"/>
+        <FIELD NAME="instanceid"   TYPE="int"  LENGTH="10" NOTNULL="true"/>
+        <FIELD NAME="userid"       TYPE="int"  LENGTH="10" NOTNULL="true"/>
+        <FIELD NAME="role"         TYPE="char" LENGTH="10" NOTNULL="true" COMMENT="ct or ht"/>
+        <FIELD NAME="responses"    TYPE="text"             NOTNULL="false" COMMENT="JSON map of question name => answer"/>
+        <FIELD NAME="timecreated"  TYPE="int"  LENGTH="10" NOTNULL="true"/>
+        <FIELD NAME="timemodified" TYPE="int"  LENGTH="10" NOTNULL="true"/>
+      </FIELDS>
+      <KEYS>
+        <KEY NAME="primary"    TYPE="primary" FIELDS="id"/>
+        <KEY NAME="instanceid" TYPE="foreign" FIELDS="instanceid" REFTABLE="researchproject" REFFIELDS="id"/>
+        <KEY NAME="userid"     TYPE="foreign" FIELDS="userid" REFTABLE="user" REFFIELDS="id"/>
+      </KEYS>
+      <INDEXES>
+        <INDEX NAME="instance_user_role" UNIQUE="true" FIELDS="instanceid, userid, role"/>
+      </INDEXES>
+    </TABLE>
+
   </TABLES>
 </XMLDB>

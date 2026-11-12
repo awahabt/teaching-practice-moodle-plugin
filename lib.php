@@ -135,7 +135,8 @@ function tp_get_rating_options() {
         'verygood'         => get_string('rating_verygood',         'mod_researchproject'),
         'good'             => get_string('rating_good',             'mod_researchproject'),
         'fair'             => get_string('rating_fair',             'mod_researchproject'),
-        'needsimprovement' => get_string('rating_needsimprovement', 'mod_researchproject'),
+        // 'needsimprovement' removed from the CT / HT evaluation forms. Old
+        // records holding it still display via tp_rating_label().
     ];
 }
 
@@ -765,11 +766,310 @@ function tp_get_instance_students($instance, $context) {
         return [];
     }
 
+    // Only keep users who are ACTIVELY enrolled in this certificate course.
+    // Without this, the submitter list above leaks in people who:
+    //   • submitted in a course picked by the loose code-only / code+semester
+    //     fallback of tp_find_matching_course() (another mode or semester),
+    //   • were unenrolled after submitting (assign_submission rows remain), or
+    //   • have a suspended / expired enrolment but still hold the role.
+    $activeids = $DB->get_fieldset_sql(
+        "SELECT DISTINCT ue.userid
+           FROM {user_enrolments} ue
+           JOIN {enrol} e ON e.id = ue.enrolid
+          WHERE e.courseid = :courseid
+            AND e.status = :enrolenabled
+            AND ue.status = :ueactive
+            AND ue.timestart <= :now1
+            AND (ue.timeend = 0 OR ue.timeend > :now2)",
+        [
+            'courseid'     => $coursecontext->instanceid,
+            'enrolenabled' => ENROL_INSTANCE_ENABLED,
+            'ueactive'     => ENROL_USER_ACTIVE,
+            'now1'         => time(),
+            'now2'         => time(),
+        ]
+    );
+    $studentids = array_intersect_key($studentids, array_flip($activeids));
+
+    // ...AND actively enrolled in their linked project-submission course.
+    // tp_find_student_submission_course() only returns a course the student
+    // has an active enrolment in, so a null result means "not in both".
+    foreach ($studentids as $sid) {
+        if (!$course || !tp_find_student_submission_course($course->shortname, $course->id, $sid)) {
+            unset($studentids[$sid]);
+        }
+    }
+
+    if (empty($studentids)) {
+        return [];
+    }
+
     list($insql, $params) = $DB->get_in_or_equal(array_values($studentids));
     $students = $DB->get_records_select('user', "id $insql AND deleted = 0", $params);
     core_collator::asort_objects_by_property($students, 'lastname', core_collator::SORT_STRING);
 
     return $students;
+}
+
+// ============================================================================
+// FEEDBACK: Form definitions per role (HT / CT / Trainee Teacher).
+//
+// This is the ONLY place the feedback forms live. feedback.php renders the
+// form, validates, saves and builds the admin report from it. Never rename an
+// existing key once feedback has been collected (answers are stored under it).
+//
+// Source: "Reviewed TP Feedback Forms for TCT, HT and TT" (Faculty of
+// Education, AIOU). Roles: 'ht' Head Teacher, 'ct' Cooperating Teacher,
+// 'student' Trainee Teacher.
+//
+// Section A is READ-ONLY: values come from tp_feedback_prefill() (Moodle
+// data + course shortname), never from the user — except fields marked
+// 'editable' => true.
+// Section A field types:
+//   text | number | coursecodes (list) | coursecode | radio (needs 'options')
+//   | static (fixed text)
+// ============================================================================
+function tp_get_feedback_form($role) {
+    $semester = tp_feedback_semester_label();
+
+    $forms = [
+        'ht' => [
+            'title'        => 'Head Teacher Feedback Form for Teaching Practice (TP) Course',
+            'shownumbers'  => false,
+            'info'         => [
+                ['name' => 'name',        'type' => 'text', 'label' => 'Name of Head Teacher', 'required' => true],
+                ['name' => 'school_name', 'type' => 'text', 'label' => 'Name of the School', 'required' => true],
+                ['name' => 'school_location', 'type' => 'text', 'label' => 'School Location/Region', 'required' => true],
+                ['name' => 'semester',    'type' => 'static', 'label' => 'Semester', 'value' => $semester],
+                ['name' => 'course_codes', 'type' => 'coursecodes', 'required' => true,
+                    'label' => 'TP Course Code(s) of Hosted Trainee Teachers',
+                    'help'  => '(Select from the drop-down menu; more than one course code may be selected.)'],
+            ],
+            'sections'     => [
+                ['title' => 'B. School Management System (SMS)', 'items' => [
+                    'sms_registration'  => 'SMS worked well during school registration.',
+                    'sms_form_clear'    => 'The school registration form was clear.',
+                    'sms_info_easy'     => 'School information was easy to enter.',
+                ]],
+                ['title' => 'C. Learning Management System (LMS)', 'items' => [
+                    'lms_access'        => 'I could access my assigned trainee teachers on LMS.',
+                    'lms_enter_info'    => 'I could enter the required information for trainee teacher on LMS.',
+                ]],
+                ['title' => 'D. Teaching Practice in School', 'items' => [
+                    'tp_positive'       => 'Hosting trainee teachers was a positive experience.',
+                    'tp_manage'         => 'I could manage the Teaching Practice responsibilities alongside my regular routine.',
+                ]],
+                ['title' => 'E. University Guidance and Support', 'items' => [
+                    'uni_explained'     => 'My responsibilities were clearly explained to me.',
+                    'uni_support'       => 'I received the required support during Teaching Practice.',
+                ]],
+            ],
+            'overall_label' => 'Overall Satisfaction with the University’s TP System (SMS, LMS and TP Activities in School):',
+            'thanks'        => 'Thank you for your Feedback',
+        ],
+
+        'ct' => [
+            'title'        => 'Cooperating Teacher Feedback Form for Teaching Practice (TP) Course',
+            'shownumbers'  => true,
+            'info'         => [
+                ['name' => 'name',        'type' => 'text', 'label' => 'Name of Cooperating Teacher', 'required' => true],
+                ['name' => 'course_codes', 'type' => 'coursecodes', 'required' => true,
+                    'label' => 'TP course code(s) for which I supervised trainee teachers in this semester',
+                    'help'  => '(select from the drop-down menu)'],
+                ['name' => 'school_name', 'type' => 'text', 'label' => 'School Name', 'required' => true],
+                ['name' => 'school_location', 'type' => 'text', 'label' => 'School Location/Region', 'required' => true],
+                // Not stored anywhere in Moodle, so this is the one field the CT types in.
+                ['name' => 'experience',  'type' => 'number', 'label' => 'Teaching Experience', 'suffix' => 'years',
+                    'required' => true, 'editable' => true],
+                ['name' => 'tp_semester', 'type' => 'radio', 'label' => 'Teaching Practice Semester',
+                    'options' => ['Spring' => 'Spring', 'Autumn' => 'Autumn'], 'required' => true],
+                ['name' => 'year',        'type' => 'number', 'label' => 'Year', 'required' => true],
+            ],
+            'sections'     => [
+                ['title' => 'B. Learning Management System (LMS)', 'items' => [
+                    'lms_access'        => 'I could access my assigned trainee teachers on LMS.',
+                    'lms_remarks'       => 'I could enter remarks on lesson plans and lesson presentations.',
+                ]],
+                ['title' => 'Section C: Teaching Practice in School', 'items' => [
+                    'tp_role_clear'     => 'My role and responsibilities as Cooperating Teacher were clear.',
+                    'tp_manageable'     => 'Supervising trainee teachers was manageable alongside my regular duties.',
+                ]],
+                ['title' => 'Section D: University Guidance and Support', 'items' => [
+                    'uni_instructions'  => 'The university provided clear instructions about my responsibilities.',
+                    'uni_support'       => 'I received the support I needed from the university during Teaching Practice.',
+                ]],
+            ],
+            'overall_label' => 'Overall Satisfaction with the University’s TP System (SMS, LMS and TP Activities in School):',
+            'thanks'        => 'Thank you for your Feedback',
+        ],
+
+        'student' => [
+            'title'        => 'Trainee Teacher Feedback Form for Teaching Practice (TP) Course',
+            'shownumbers'  => true,
+            'info'         => [
+                ['name' => 'name',        'type' => 'text', 'label' => 'Name', 'required' => true],
+                ['name' => 'registration_no', 'type' => 'text', 'label' => 'Registration No.', 'required' => true],
+                ['name' => 'course_code', 'type' => 'coursecode', 'label' => 'TP Course Code', 'required' => true],
+                ['name' => 'school_name', 'type' => 'text', 'label' => 'School Where I Completed TP', 'required' => true],
+                ['name' => 'grades_taught', 'type' => 'text', 'label' => 'Grades I Taught During TP', 'required' => true],
+                ['name' => 'semester',    'type' => 'static', 'label' => 'Semester', 'value' => $semester],
+            ],
+            'sections'     => [
+                ['title' => 'B. Learning Management System (LMS)', 'items' => [
+                    'lms_school_details'  => 'The school details displayed on LMS were clear.',
+                    'lms_ht_ct_details'   => 'The Head Teacher and Cooperating Teacher details displayed on LMS were clear.',
+                    'lms_instructions'    => 'The instructions for submitting TP work on LMS were clear.',
+                    'lms_submit'          => 'I could submit my work on LMS without difficulty.',
+                ]],
+                ['title' => 'C. Teaching Practice Activities', 'items' => [
+                    'tp_workshop'         => 'The TP workshop clearly explained the requirements for my work.',
+                    'tp_school_activities' => 'The instructions for school-based TP activities were clear.',
+                    'tp_final_lessons'    => 'The instructions for preparing and delivering final lessons were clear.',
+                    'tp_ht_support'       => 'The Head Teacher provided the support I needed during TP.',
+                    'tp_ct_feedback'      => 'The Cooperating Teacher provided useful feedback on my teaching.',
+                ]],
+                ['title' => 'D. University Support', 'items' => [
+                    'uni_tutor_support'   => 'The Tutor provided the support I needed to complete TP activities.',
+                    'uni_tutor_feedback'  => 'The Tutor’s feedback helped me improve my submitted work.',
+                ]],
+            ],
+            'overall_label' => 'Overall Satisfaction with the University’s TP System (LMS and TP Activities in School):',
+            'thanks'        => 'Thank you for your feedback',
+        ],
+    ];
+
+    return $forms[$role] ?? null;
+}
+
+// 5-point scale used by every rating grid (value => column heading).
+function tp_feedback_rating_scale() {
+    return [5 => 'Excellent', 4 => 'Very Good', 3 => 'Good', 2 => 'Fair', 1 => 'Needs Improvement'];
+}
+
+// "Overall Satisfaction" options — identical on all three forms.
+// $includeremoved = true adds options no longer offered on the form, so the
+// report / CSV can still label responses saved before they were removed.
+function tp_feedback_overall_options($includeremoved = false) {
+    $options = [
+        'satisfied'       => 'Satisfied',
+        'minor'           => 'Satisfied, but Minor Improvements Are Needed',
+    ];
+    if ($includeremoved) {
+        // Removed from every role's form; kept only for old responses.
+        $options['not_satisfied'] = 'Not Satisfied; Major Improvements Are Needed';
+    }
+    return $options;
+}
+
+// Semester printed on the feedback forms, worked out from today's date using
+// the AIOU calendar: Spring = March–August, Autumn = September–February
+// (January / February still belong to the previous year's Autumn semester).
+function tp_feedback_semester_label($time = null) {
+    $time  = $time ?? time();
+    $month = (int) date('n', $time);
+    $year  = (int) date('Y', $time);
+    if ($month >= 3 && $month <= 8) {
+        return 'Spring ' . $year;
+    }
+    return 'Autumn ' . ($month <= 2 ? $year - 1 : $year);
+}
+
+// Admin switch: show the signature block on certificates.
+function tp_certificate_show_signature() {
+    return (bool) get_config('mod_researchproject', 'show_signature');
+}
+
+// Region / location = 4th-from-last segment of a pipe-format shortname,
+// e.g. AIOU|6997|40|60N3QLVO|<REGION>|SMS|ODL|2611 → <REGION>.
+function tp_get_course_region($shortname) {
+    $parsed = tp_parse_course_shortname($shortname);
+    $parts  = $parsed['parts'];
+    $n      = count($parts);
+    // The region must sit after the course code (index 1, or 0 without the
+    // TYPE prefix) — short shortnames have no region segment at all.
+    $codeindex = $parsed['type'] === '' ? 0 : 1;
+    return ($parsed['pipe_format'] && $n - 4 > $codeindex) ? trim($parts[$n - 4]) : '';
+}
+
+// Section A values (read-only on the form), from what Moodle already knows.
+function tp_feedback_prefill($role, stdClass $instance, stdClass $course, stdClass $user) {
+    $parsed = tp_parse_course_shortname($course->shortname);
+    $extracted = tp_extract_course_code_and_school_name($course);
+    $values = [
+        'name'            => fullname($user),
+        'school_location' => tp_get_course_region($course->shortname),
+        'school_name'     => $extracted['schoolname'] ?? '',
+    ];
+
+    // CT: "Spring / Autumn" + "Year" come from the semester setting ("Autumn 2026").
+    if (preg_match('/\b(spring|autumn)\b\D*(\d{4})?/i', tp_feedback_semester_label(), $m)) {
+        $values['tp_semester'] = ucfirst(strtolower($m[1]));
+        $values['year']        = $m[2] ?? '';
+    }
+
+    if ($role === 'student') {
+        $performa = tp_get_performa($instance->id, $user->id);
+        $section  = tp_build_section_a_data($user, $performa, $instance);
+        $grades   = $performa ? json_decode($performa->grades_taught ?? '', true) : [];
+        $submission = tp_find_student_submission_course($course->shortname, $course->id, $user->id);
+        $subparsed  = $submission ? tp_parse_course_shortname($submission->shortname) : $parsed;
+
+        // Registration No. is stored in the student's Moodle last name; fall
+        // back to the Section A value only if the last name is empty.
+        $values['registration_no'] = trim((string) $user->lastname) !== ''
+            ? trim($user->lastname)
+            : ($section->registration_no ?? '');
+        if (!empty($section->school_name)) {
+            $values['school_name'] = $section->school_name;
+        }
+        $values['grades_taught']   = is_array($grades) ? implode(', ', array_filter($grades)) : '';
+        $values['course_code']     = $subparsed['coursecode'] ?? '';
+    } else {
+        $values['course_codes'] = !empty($parsed['coursecode']) ? [$parsed['coursecode']] : [];
+    }
+    return $values;
+}
+
+// True once the feedback table exists. Between deploying new plugin code and
+// an admin running the upgrade, non-admin users can still open pages; the
+// feedback buttons are simply hidden in that window instead of crashing.
+function tp_feedback_available() {
+    global $DB;
+    static $available = null;
+    if ($available === null) {
+        $available = $DB->get_manager()->table_exists('researchproject_feedback');
+    }
+    return $available;
+}
+
+function tp_get_feedback($instanceid, $userid, $role) {
+    global $DB;
+    if (!tp_feedback_available()) {
+        return false;
+    }
+    return $DB->get_record('researchproject_feedback',
+        ['instanceid' => $instanceid, 'userid' => $userid, 'role' => $role]);
+}
+
+// ============================================================================
+// HELPER: Enforce the core linking rule for a single student.
+//
+// A student is only shown / evaluated / certified when they are ACTIVELY
+// enrolled in BOTH the certificate course AND their matching project-
+// submission course. Throws if not.
+//
+// @return stdClass  The student's project-submission course.
+// ============================================================================
+function tp_require_student_in_both_courses(stdClass $course, $studentid) {
+    $coursecontext = context_course::instance($course->id);
+    $submission = is_enrolled($coursecontext, $studentid, '', true)
+        ? tp_find_student_submission_course($course->shortname, $course->id, $studentid)
+        : null;
+
+    if (!$submission) {
+        throw new moodle_exception('error_student_not_enrolled_both', 'mod_researchproject');
+    }
+    return $submission;
 }
 
 // ============================================================================
@@ -1411,7 +1711,9 @@ function tp_find_student_submission_course($cert_shortname, $cert_course_id, $st
     $enrol_join = "JOIN {enrol}            e  ON e.courseid  = c.id AND e.status = 0
                    JOIN {user_enrolments}  ue ON ue.enrolid  = e.id
                                              AND ue.userid   = :enrol_userid
-                                             AND ue.status   = 0";
+                                             AND ue.status   = 0
+                                             AND ue.timestart <= :enrol_now1
+                                             AND (ue.timeend = 0 OR ue.timeend > :enrol_now2)";
 
     $exclude_sql = $cert_course_id ? ' AND c.id != :excludeid' : '';
 
@@ -1419,6 +1721,8 @@ function tp_find_student_submission_course($cert_shortname, $cert_course_id, $st
     $like_code = '%' . $DB->sql_like_escape($coursecode) . '%';
     $params = [
         'enrol_userid' => $studentid,
+        'enrol_now1'   => time(),
+        'enrol_now2'   => time(),
         'code_sn'      => $like_code,
         'code_id'      => $like_code,
     ];

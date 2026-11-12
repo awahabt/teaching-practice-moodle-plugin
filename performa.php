@@ -43,7 +43,9 @@ if ($role === 'ct') {
 // tp_find_student_submission_course() requires the AIOU prefix and TP role
 // marker, matches coursecode + mode + semester on both shortname AND
 // idnumber, and restricts to courses the student is actively enrolled in.
-$matching_course = tp_find_student_submission_course($course->shortname, $course->id, $studentid);
+// The STUDENT being evaluated must be actively enrolled in BOTH the
+// certificate course and the project-submission course.
+$matching_course = tp_require_student_in_both_courses($course, $studentid);
 $course_fully_linked = false;
 if ($matching_course) {
     $parsed = tp_parse_course_shortname($course->shortname);

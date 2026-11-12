@@ -51,7 +51,9 @@ if ($viewer_role === 'student' && $USER->id != $student->id) {
 //   • AIOU prefix + TP role marker, same coursecode, same mode, same semester.
 //   • Matches on both shortname segments AND the course idnumber field.
 //   • Restricted to courses the student is actively enrolled in.
-$matching_course = tp_find_student_submission_course($course->shortname, $course->id, $studentid);
+// The STUDENT must be actively enrolled in BOTH the certificate course and
+// the project-submission course; otherwise no certificate is shown.
+$matching_course = tp_require_student_in_both_courses($course, $studentid);
 if ($matching_course) {
     $mc_parsed = tp_parse_course_shortname($matching_course->shortname);
     $grading_components = tp_get_grading_components($mc_parsed['coursecode'], $mc_parsed['semestercode']);
@@ -163,6 +165,8 @@ $extracted = tp_extract_course_code_and_school_name($course, $matching_course);
 $display_coursecode = !empty($extracted['coursecode']) ? $extracted['coursecode'] : ($matching_course ? $matching_course->shortname : $course->shortname);
 $display_schoolname = !empty($extracted['schoolname']) ? $extracted['schoolname'] : $performa->school_name;
 
+
+$show_signature = tp_certificate_show_signature();
 
 $signaturename = get_config('mod_researchproject', 'signature_name');
 if (empty($signaturename)) {
@@ -371,15 +375,70 @@ echo $OUTPUT->header();
         padding-top: 14px;
     }
 
-    /* ── Print styles — certificate only, no Moodle chrome ───────── */
+    /* ── A4 print copy ───────────────────────────────────────────────
+       A clone of the certificate is placed directly under <body> as
+       #tp-print-root. Off-screen it is laid out at the exact A4 content
+       width (190mm) so JS can measure it and pick a scale (--s) that makes
+       the certificate fill one A4 page. All print sizes are in pt/mm and
+       multiplied by --s, so they are independent of Moodle's rem sizes. */
+    #tp-print-root {
+        position: absolute;
+        left: -10000px;
+        top: 0;
+        width: 190mm;
+        visibility: hidden;
+        pointer-events: none;
+    }
+
+    #tp-print-root .tp-certificate {
+        --s: 1;
+        box-sizing: border-box;
+        width: 190mm;
+        max-width: none;
+        margin: 0;
+        padding: calc(8mm * var(--s)) calc(11mm * var(--s));
+        border: 5px double #0d7215;
+        box-shadow: none;
+        display: flex;
+        flex-direction: column;
+        font-size: calc(12.5pt * var(--s));
+    }
+
+    #tp-print-root .cert-no { font-size: calc(10pt * var(--s)); margin-bottom: calc(2mm * var(--s)); }
+    #tp-print-root .cert-header { padding-bottom: calc(3mm * var(--s)); margin-bottom: calc(3mm * var(--s)); }
+    #tp-print-root .cert-header h2 { font-size: calc(24pt * var(--s)); }
+    #tp-print-root .cert-header p { font-size: calc(11pt * var(--s)); }
+    #tp-print-root .cert-title { font-size: calc(17pt * var(--s)); margin: calc(3mm * var(--s)) 0 calc(5mm * var(--s)); }
+    #tp-print-root .cert-body { font-size: calc(13pt * var(--s)); line-height: 1.55; }
+    #tp-print-root p { margin: 0 0 calc(2mm * var(--s)); }
+    #tp-print-root .text-muted { font-size: calc(10.5pt * var(--s)) !important; }
+    #tp-print-root .cert-subj-grades { margin: 0 0 calc(2mm * var(--s)) calc(8mm * var(--s)); }
+    #tp-print-root .eval-table { font-size: calc(12pt * var(--s)); margin: calc(2mm * var(--s)) 0 calc(4mm * var(--s)); }
+    #tp-print-root .eval-table th,
+    #tp-print-root .eval-table td { padding: calc(1.5mm * var(--s)) calc(3mm * var(--s)); }
+    #tp-print-root .cert-recommendation {
+        font-size: calc(12.5pt * var(--s));
+        padding: calc(2.5mm * var(--s)) calc(4mm * var(--s));
+        margin: calc(3mm * var(--s)) 0 calc(6mm * var(--s));
+    }
+    /* Footer sticks to the bottom of the page. */
+    #tp-print-root .cert-footer {
+        font-size: calc(10.5pt * var(--s));
+        margin-top: auto;
+        padding-top: calc(3mm * var(--s));
+    }
+
+    /* ── Print: only the A4 copy, no Moodle chrome ───────────────── */
     @media print {
         @page {
-            margin: 12mm;
             size: A4 portrait;
+            margin: 10mm;
         }
 
         html,
         body {
+            width: auto !important;
+            min-width: 0 !important;
             height: auto !important;
             overflow: visible !important;
             background: #fff !important;
@@ -387,64 +446,46 @@ echo $OUTPUT->header();
             padding: 0 !important;
         }
 
-        body * {
-            visibility: hidden;
-        }
-
-        .no-print,
-        .no-print * {
+        body > *:not(#tp-print-root) {
             display: none !important;
-            visibility: hidden !important;
         }
 
-        .tp-certificate,
-        .tp-certificate * {
-            visibility: visible;
+        #tp-print-root {
+            position: static !important;
+            visibility: visible !important;
         }
 
-        .tp-certificate {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100% !important;
-            max-width: 100% !important;
-            margin: 0 !important;
-            padding: 24px 32px !important;
-            border: 4px double #0d7215ff !important;
-            box-shadow: none !important;
+        #tp-print-root .tp-certificate {
+            /* A4 height (297mm) minus the 2 × 10mm page margins, less a hair. */
+            min-height: 276mm;
             page-break-inside: avoid;
+            break-inside: avoid;
+        }
+
+        #tp-print-root,
+        #tp-print-root * {
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
         }
-
-        .tp-certificate .eval-table th {
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
-        }
-
-        /* Tighter spacing so the whole certificate fits on one A4 page. */
-        .tp-certificate .cert-body { line-height: 1.5; font-size: 1.25rem; }
-        .tp-certificate .cert-header { padding-bottom: 10px; margin-bottom: 12px; }
-        .tp-certificate .cert-title { margin: 10px 0 14px; }
-        .tp-certificate .eval-table { margin: 8px 0; font-size: 1rem; }
-        .tp-certificate .eval-table th,
-        .tp-certificate .eval-table td { padding: 4px 10px; }
-        .tp-certificate p { margin-bottom: 4px; }
-        .tp-certificate .cert-recommendation { margin: 10px 0; padding: 6px 12px; }
-        .tp-certificate .cert-signatures { margin-top: 8px; }
-        .tp-certificate .cert-footer { margin-top: 14px; padding-top: 8px; }
     }
 </style>
 
 <!-- Action buttons (hidden on print) -->
 <div class="no-print mb-3">
-    <button type="button" onclick="window.print();" class="btn btn-primary mr-2">
+    <button type="button" onclick="tpPrintCertificate();" class="btn btn-primary mr-2">
         🖨️ Print Certificate
     </button>
     <a href="<?php echo (new moodle_url('/mod/researchproject/view.php', ['id' => $cmid]))->out(); ?>"
         class="btn btn-secondary">
         ← Back
     </a>
+    <?php if (tp_feedback_available() && in_array($viewer_role, ['student', 'ct', 'ht'])) :
+        $tp_has_feedback = (bool) tp_get_feedback($instance->id, $USER->id, $viewer_role); ?>
+    <a href="<?php echo (new moodle_url('/mod/researchproject/feedback.php', ['id' => $cmid]))->out(); ?>"
+        class="btn btn-outline-primary ml-2">
+        💬 <?php echo get_string($tp_has_feedback ? 'feedback_edit' : 'feedback_button', 'mod_researchproject'); ?>
+    </a>
+    <?php endif; ?>
 </div>
 
 <!-- ══════════════════════════════════════════════════════════════
@@ -624,7 +665,8 @@ echo $OUTPUT->header();
         <?php echo s(tp_recommendation_label($performa->ht_overall_recommendation)); ?>
     </div>
 
-    <!-- Signatures -->
+    <?php if ($show_signature) : ?>
+    <!-- Signatures (Site admin > Plugins > Teaching Practice > "Show signature on certificate") -->
     <div class="cert-signatures">
         <div class="cert-signature-col">
             <div class="signature-space">
@@ -637,16 +679,66 @@ echo $OUTPUT->header();
             </div>
         </div>
     </div>
+    <?php endif; ?>
 
     <!-- Footer -->
     <div class="cert-footer">
-        This is a digitally signed certificate.<br>
+        <?php if (!$show_signature) : ?>
+            This is a system-generated certificate and does not require a signature.<br>
+        <?php endif; ?>
         Issued by <strong>Allama Iqbal Open University</strong> - School Management System for Teaching Practice
     </div>
 
 </div>
 
 <script>
+    // ── A4 print copy: clone the certificate under <body> and scale it to fill one page.
+    (function () {
+        var MM = 96 / 25.4;              // CSS px per mm.
+        var TARGET = 268 * MM;           // Usable A4 height (277mm) with a small safety gap.
+        var root = null;
+
+        function build() {
+            if (root) { return root; }
+            var cert = document.querySelector('.tp-certificate');
+            if (!cert) { return null; }
+            root = document.createElement('div');
+            root.id = 'tp-print-root';
+            root.setAttribute('aria-hidden', 'true');
+            root.appendChild(cert.cloneNode(true));
+            document.body.appendChild(root);
+            return root;
+        }
+
+        function fit() {
+            var r = build();
+            if (!r) { return; }
+            var c = r.querySelector('.tp-certificate');
+            // Largest scale whose natural height still fits one A4 page.
+            var lo = 0.55, hi = 1.6;
+            for (var i = 0; i < 14; i++) {
+                var mid = (lo + hi) / 2;
+                c.style.setProperty('--s', mid);
+                if (c.scrollHeight <= TARGET) { lo = mid; } else { hi = mid; }
+            }
+            c.style.setProperty('--s', lo.toFixed(3));
+        }
+
+        window.tpPrintCertificate = function () {
+            fit();
+            window.print();
+        };
+        window.addEventListener('beforeprint', fit);   // Also covers Ctrl+P.
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', fit);
+        } else {
+            fit();
+        }
+        if (document.fonts && document.fonts.ready) {
+            document.fonts.ready.then(fit);
+        }
+    })();
+
     document.addEventListener('DOMContentLoaded', function () {
         var sigImg = document.querySelector('.signature-img');
         if (sigImg) {

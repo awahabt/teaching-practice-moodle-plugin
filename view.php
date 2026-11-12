@@ -130,6 +130,18 @@ switch ($tp_role) {
 
         echo $OUTPUT->header();
 
+        // ── Trainee Teacher feedback button ──────────────────────────────────
+        // Only for students active in BOTH the certificate and submission course
+        // (reaching this point already guarantees the submission course).
+        if (tp_feedback_available() && is_enrolled(context_course::instance($course->id), $USER->id, '', true)) {
+            $has_feedback = (bool) tp_get_feedback($instance->id, $USER->id, 'student');
+            echo html_writer::div(html_writer::link(
+                new moodle_url('/mod/researchproject/feedback.php', ['id' => $id]),
+                '💬 ' . get_string($has_feedback ? 'feedback_edit' : 'feedback_button', 'mod_researchproject'),
+                ['class' => 'btn btn-primary']
+            ), 'mb-3');
+        }
+
         // ── School / Cooperating Teacher / Head Teacher info ─────────────────
         // Purely informational — shown regardless of evaluation status.
         // School name comes from the student's own Section A data; CT/HT
@@ -442,6 +454,28 @@ function tp_render_teacher_dashboard($cmid, $instance, $context, $role, $OUTPUT,
         echo html_writer::end_div(); // card
     }
 
+    // ── Feedback button (CT / HT) + responses link (site admins) ─────────────
+    $feedback_buttons = '';
+    if (tp_feedback_available() && in_array($role, ['ct', 'ht'])) {
+        global $USER;
+        $has_feedback = (bool) tp_get_feedback($instance->id, $USER->id, $role);
+        $feedback_buttons .= html_writer::link(
+            new moodle_url('/mod/researchproject/feedback.php', ['id' => $cmid]),
+            '💬 ' . get_string($has_feedback ? 'feedback_edit' : 'feedback_button', 'mod_researchproject'),
+            ['class' => 'btn btn-primary mr-2']
+        );
+    }
+    if (tp_feedback_available() && has_capability('moodle/site:config', context_system::instance())) {
+        $feedback_buttons .= html_writer::link(
+            new moodle_url('/mod/researchproject/feedback.php', ['id' => $cmid, 'action' => 'report']),
+            '📋 ' . get_string('feedback_report', 'mod_researchproject'),
+            ['class' => 'btn btn-outline-secondary']
+        );
+    }
+    if ($feedback_buttons !== '') {
+        echo html_writer::div($feedback_buttons, 'mb-3');
+    }
+
     $students = tp_get_instance_students($instance, $context);
 
     if (empty($students)) {
@@ -454,7 +488,7 @@ function tp_render_teacher_dashboard($cmid, $instance, $context, $role, $OUTPUT,
     // Build table
     $table             = new html_table();
     $table->head       = [
-        '#', 'Student Name', 'Reg. No.',
+        '#', 'Student Name', 'Student Email',
         'Project Submitted', 'Grade %', 'CT Evaluation', 'HT Evaluation', 'Action'
     ];
     $table->attributes = ['class' => 'table table-bordered table-hover generaltable'];
